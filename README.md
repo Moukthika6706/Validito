@@ -157,7 +157,8 @@ frontend/ (React + Vite)  ──▶  nginx  ──▶  backend/app/api/v1 (FastA
 | `backend/app/audit` | Hash-chained append-only logger and verifier |
 | `backend/app/workers` | Celery app (per-stage queues) and tasks |
 | `backend/app/models` | SQLAlchemy ORM; `backend/alembic` migrations |
-| `frontend/src/pages` | Dashboard, Documents, Upload, DocumentDetail, ReviewQueue, ReviewDocument, AuditTrail, AdminRulePacks, AdminUsers |
+| `frontend/src/pages` | Auth (log in / sign up), Dashboard, UploadDocument, ReviewDocument (split-pane review), ReviewQueue, AuditTrail, AdminRulePacks, AdminUsers |
+| `frontend/src/components` | GlowBackground, Button, StatCard, StatusPill family, ConfidenceMeter, ClauseCard, DataTable, States; design tokens in `frontend/src/theme/tokens.css` |
 | `docs/` | `DATA_MODEL.md`, `ARCHITECTURE.md` |
 | `samples/` | Demo term sheets (clean / faulty ISDA, confirmation, LMA DOCX, scanned PNG) |
 
@@ -214,6 +215,7 @@ each edit cuts a new pack version, and flags keep the snapshot of the version th
 ## Security notes
 
 - JWT (HS256) with bcrypt password hashing; every protected route resolves the user from the token.
+- Sign-up may pick a role while `ALLOW_SELF_ROLE_SELECTION=true` (demo default). Set it to `false` in production so only admins assign roles.
 - Role guards: analysts only see their own documents (other ids return 404 to prevent enumeration);
   reviewers see all documents and the queue; admins additionally manage rule packs and users.
 - Uploads: extension allow-list, MIME sniffed from content (DOCX verified as a real Word zip), size
