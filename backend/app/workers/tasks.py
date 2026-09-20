@@ -49,3 +49,8 @@ def validate_document(self, document_id: int) -> int:
 def enqueue_processing(document_id: int):
     """Extraction then validation. Returns the AsyncResult of the chain."""
     return chain(extract_document.s(document_id), validate_document.s()).apply_async()
+
+
+def enqueue_validation(document_id: int):
+    """Re-run rules/ML/routing on already-extracted entities (e.g. after a rule pack edit)."""
+    return validate_document.apply_async(args=(document_id,))

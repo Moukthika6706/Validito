@@ -33,6 +33,7 @@ class DocumentOut(ORMModel):
     page_count: int | None
     ocr_used: bool
     error_message: str | None
+    review_outcome: str | None = None
     created_at: datetime
     updated_at: datetime
 
