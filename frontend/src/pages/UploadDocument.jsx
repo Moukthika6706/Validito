@@ -1,7 +1,9 @@
 import { useRef, useState } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { useNavigate } from 'react-router-dom'
 import { documents, rulePacks } from '../api/endpoints'
-import { Alert, Field } from '../components/ui'
+import Button from '../components/Button'
+import GlowBackground from '../components/GlowBackground'
+import { Field, Notice } from '../components/States'
 import { useAsync } from '../hooks/useAsync'
 import { fmtBytes } from '../utils/format'
 
@@ -37,7 +39,7 @@ export default function UploadDocument() {
     setError(null)
     try {
       const doc = await documents.upload({ file, doc_type: docType, rule_pack_key: pack || null, related_document_id: related || null })
-      navigate(`/documents/${doc.id}`, { state: { justUploaded: true } })
+      navigate(`/review/${doc.id}`)
     } catch (err) {
       setError(err.detail || err.message)
     } finally {
@@ -46,81 +48,87 @@ export default function UploadDocument() {
   }
 
   return (
-    <>
-      <div className="page-header">
+    <div className="page" style={{ maxWidth: 1080 }}>
+      <GlowBackground position="corner" soft />
+      <div className="above" style={{ display: 'grid', gridTemplateColumns: '1fr 1.2fr', gap: 56, alignItems: 'start' }}>
         <div>
-          <h1>Upload a term sheet</h1>
-          <p>Processing runs in the background: text extraction (OCR for scans), clause extraction, rule checks, anomaly scoring, then routing.</p>
-        </div>
-      </div>
-      <form className="card" onSubmit={submit} style={{ maxWidth: 720 }}>
-        {error && <Alert tone="danger">{error}</Alert>}
-        <div
-          className={`dropzone ${drag ? 'active' : ''}`}
-          onClick={() => inputRef.current.click()}
-          onDragOver={(e) => {
-            e.preventDefault()
-            setDrag(true)
-          }}
-          onDragLeave={() => setDrag(false)}
-          onDrop={(e) => {
-            e.preventDefault()
-            setDrag(false)
-            pick(e.dataTransfer.files[0])
-          }}
-        >
-          <input ref={inputRef} type="file" accept={ACCEPT} hidden onChange={(e) => pick(e.target.files[0])} />
-          {file ? (
-            <>
-              <strong>{file.name}</strong>
-              <div className="muted small">{fmtBytes(file.size)} · click to change</div>
-            </>
-          ) : (
-            <>
-              <strong>Drop a file here or click to browse</strong>
-              <div className="small">PDF, DOCX, or a scanned image (PNG / JPG / TIFF) up to {MAX_MB} MB</div>
-            </>
-          )}
+          <p className="eyebrow">New document</p>
+          <h1 className="display display-h1">
+            Upload a<br />term sheet
+          </h1>
+          <p className="lede">
+            Extraction, rule checks, anomaly scoring and routing run in the background. You'll land on the review screen and watch it
+            progress.
+          </p>
+          <ul className="small muted" style={{ paddingLeft: 18, lineHeight: 1.9 }}>
+            <li>PDF, DOCX, or a scanned image (PNG / JPG / TIFF)</li>
+            <li>Up to {MAX_MB} MB; scans take a little longer (OCR)</li>
+            <li>Link a confirmation to run cross-document checks</li>
+          </ul>
         </div>
 
-        <div className="grid grid-2" style={{ marginTop: 16 }}>
-          <Field label="Document type">
-            <select value={docType} onChange={(e) => setDocType(e.target.value)}>
-              <option value="term_sheet">Term sheet</option>
-              <option value="confirmation">Confirmation</option>
-              <option value="other">Other</option>
-            </select>
-          </Field>
-          <Field label="Rule pack" hint="Leave on auto-detect to pick ISDA / LMA from the document's content.">
-            <select value={pack} onChange={(e) => setPack(e.target.value)}>
-              <option value="">Auto-detect</option>
-              {(packs.data || []).map((p) => (
-                <option key={p.key} value={p.key}>
-                  {p.name} (v{p.version})
+        <form className="card" onSubmit={submit}>
+          {error && <Notice tone="bad">{error}</Notice>}
+          <div
+            className={`dropzone ${drag ? 'active' : ''}`}
+            onClick={() => inputRef.current.click()}
+            onDragOver={(e) => { e.preventDefault(); setDrag(true) }}
+            onDragLeave={() => setDrag(false)}
+            onDrop={(e) => { e.preventDefault(); setDrag(false); pick(e.dataTransfer.files[0]) }}
+          >
+            <input ref={inputRef} type="file" accept={ACCEPT} hidden onChange={(e) => pick(e.target.files[0])} />
+            {file ? (
+              <>
+                <div style={{ fontWeight: 600, color: 'var(--ink)' }}>{file.name}</div>
+                <div className="small">{fmtBytes(file.size)} · click to change</div>
+              </>
+            ) : (
+              <>
+                <div style={{ fontWeight: 600, color: 'var(--ink)' }}>Drop a file here or click to browse</div>
+                <div className="small">PDF · DOCX · PNG · JPG · TIFF</div>
+              </>
+            )}
+          </div>
+
+          <div className="field-row" style={{ marginTop: 20 }}>
+            <Field label="Document type">
+              <select value={docType} onChange={(e) => setDocType(e.target.value)}>
+                <option value="term_sheet">Term sheet</option>
+                <option value="confirmation">Confirmation</option>
+                <option value="other">Other</option>
+              </select>
+            </Field>
+            <Field label="Rule pack" hint="Auto-detect picks ISDA / LMA from the content.">
+              <select value={pack} onChange={(e) => setPack(e.target.value)}>
+                <option value="">Auto-detect</option>
+                {(packs.data || []).map((p) => (
+                  <option key={p.key} value={p.key}>
+                    {p.name} (v{p.version})
+                  </option>
+                ))}
+              </select>
+            </Field>
+          </div>
+          <Field label="Compare against (optional)" hint="e.g. the confirmation for this term sheet.">
+            <select value={related} onChange={(e) => setRelated(e.target.value)}>
+              <option value="">None</option>
+              {(candidates.data?.items || []).map((d) => (
+                <option key={d.id} value={d.id}>
+                  #{d.id} · {d.original_filename}
                 </option>
               ))}
             </select>
           </Field>
-        </div>
-        <Field label="Compare against (optional)" hint="Link a related document — e.g. the confirmation for this term sheet — to run cross-document consistency checks.">
-          <select value={related} onChange={(e) => setRelated(e.target.value)}>
-            <option value="">None</option>
-            {(candidates.data?.items || []).map((d) => (
-              <option key={d.id} value={d.id}>
-                #{d.id} · {d.original_filename} ({d.status.replace('_', ' ')})
-              </option>
-            ))}
-          </select>
-        </Field>
-        <div className="btn-group">
-          <button className="btn btn-primary" disabled={busy || !file}>
-            {busy ? 'Uploading…' : 'Upload and validate'}
-          </button>
-          <Link className="btn" to="/documents">
-            Cancel
-          </Link>
-        </div>
-      </form>
-    </>
+          <div className="row" style={{ marginTop: 8 }}>
+            <Button size="lg" loading={busy} disabled={!file}>
+              Upload and validate
+            </Button>
+            <Button variant="ghost" to="/">
+              Cancel
+            </Button>
+          </div>
+        </form>
+      </div>
+    </div>
   )
 }
