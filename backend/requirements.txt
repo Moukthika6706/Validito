@@ -1,0 +1,41 @@
+# --- API ---
+fastapi>=0.115,<1.0
+uvicorn[standard]>=0.30
+python-multipart>=0.0.9
+pydantic>=2.7
+pydantic-settings>=2.3
+
+# --- Database ---
+sqlalchemy>=2.0,<3.0
+pymysql>=1.1
+cryptography>=42
+alembic>=1.13
+
+# --- Queue ---
+celery[redis]>=5.4
+redis>=5.0
+
+# --- Auth ---
+PyJWT>=2.8
+bcrypt>=4.1
+
+# --- Document processing ---
+pymupdf>=1.24          # PDF text + page rendering (no poppler needed)
+python-docx>=1.1
+filetype>=1.2          # pure-python MIME sniffing
+easyocr>=1.7           # pulls torch; see README for CPU-only install
+spacy>=3.7
+python-dateutil>=2.9
+
+# --- ML ---
+scikit-learn>=1.4
+pandas>=2.2
+numpy>=1.26
+joblib>=1.4
+
+# --- Config ---
+pyyaml>=6.0
+
+# --- Test ---
+pytest>=8.0
+httpx>=0.27
