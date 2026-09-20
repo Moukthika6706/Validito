@@ -1,0 +1,333 @@
+# ISDA-style derivatives term sheet conventions.
+#
+# Each rule names a registered check type (app/rules/checks/builtin.py), a severity, a base
+# confidence (how sure we are that a hit is a genuine problem rather than an extraction
+# artefact), and an explanation template rendered with the check's evidence. Nothing in
+# core code references ISDA; edit or copy this file to change behaviour.
+
+key: isda
+name: ISDA Derivatives Term Sheet
+version: "1.0.0"
+description: >
+  Mandatory economics and legal terms for OTC derivative term sheets and confirmations
+  documented under an ISDA Master Agreement (interest rate swaps, FX, credit).
+applies_to: [isda, swap, derivative, confirmation, fixed rate payer, floating rate payer, csa, credit support annex]
+
+routing:
+  auto_approve_confidence: 0.85
+  block_severities: [error, critical]
+  min_auto_approve_score: 0.7
+
+ml:
+  enabled: true
+  severity: warning
+  anomaly_threshold: 0.6
+
+rules:
+  # --- mandatory clauses -----------------------------------------------------------
+  - id: isda.notional.present
+    check: presence
+    field: notional_amount
+    severity: critical
+    confidence: 0.95
+    title: Notional amount missing
+    explanation: No notional amount was found. Every ISDA transaction must state the notional on which payments are calculated.
+    tags: [mandatory]
+
+  - id: isda.counterparties.present
+    check: min_count
+    field: counterparty
+    params: {min: 2}
+    severity: critical
+    confidence: 0.95
+    title: Fewer than two counterparties identified
+    explanation: Only {count} counterparty was identified; an ISDA transaction requires both Party A and Party B to be named.
+    tags: [mandatory]
+
+  - id: isda.effective_date.present
+    check: presence
+    field: effective_date
+    severity: error
+    confidence: 0.9
+    title: Effective date missing
+    explanation: No effective date was found. The effective date fixes when the transaction's obligations begin.
+    tags: [mandatory]
+
+  - id: isda.maturity.present
+    check: presence
+    field: maturity_date
+    severity: critical
+    confidence: 0.95
+    title: Termination / maturity date missing
+    explanation: No termination or maturity date was found. Without it the tenor and final exchange cannot be determined.
+    tags: [mandatory]
+
+  - id: isda.governing_law.present
+    check: presence
+    field: governing_law
+    severity: critical
+    confidence: 0.95
+    title: Governing law missing
+    explanation: No governing law clause was found. ISDA documentation must elect a governing law (typically English or New York law).
+    tags: [mandatory, legal]
+
+  - id: isda.settlement.present
+    check: presence
+    field: settlement_terms
+    severity: error
+    confidence: 0.85
+    title: Settlement terms missing
+    explanation: No settlement terms were found; the sheet must state whether the transaction is cash or physically settled.
+    tags: [mandatory]
+
+  - id: isda.rate.present
+    check: presence
+    field: interest_rate
+    severity: error
+    confidence: 0.85
+    title: Rate / coupon missing
+    explanation: No fixed rate, floating rate option or coupon was found.
+    tags: [mandatory]
+
+  - id: isda.documentation.present
+    check: presence
+    field: documentation
+    severity: warning
+    confidence: 0.75
+    title: Master agreement reference missing
+    explanation: The sheet does not reference the governing master agreement (e.g. "ISDA 2002 Master Agreement").
+    tags: [legal]
+
+  # --- format / parseability ------------------------------------------------------
+  - id: isda.notional.format
+    check: normalized
+    field: notional_amount
+    severity: error
+    confidence: 0.85
+    title: Notional amount unreadable
+    explanation: The notional amount "{raw}" could not be parsed into a currency and figure.
+    tags: [format]
+
+  - id: isda.maturity.format
+    check: normalized
+    field: maturity_date
+    severity: error
+    confidence: 0.85
+    title: Termination date unreadable
+    explanation: The termination date "{raw}" could not be parsed as a date or tenor.
+    tags: [format]
+
+  - id: isda.effective_date.format
+    check: normalized
+    field: effective_date
+    severity: error
+    confidence: 0.85
+    title: Effective date unreadable
+    explanation: The effective date "{raw}" could not be parsed as a date.
+    tags: [format]
+
+  - id: isda.rate.format
+    check: normalized
+    field: interest_rate
+    severity: warning
+    confidence: 0.8
+    title: Rate unreadable
+    explanation: The rate "{raw}" could not be parsed as a fixed percentage or benchmark plus spread.
+    tags: [format]
+
+  - id: isda.settlement.format
+    check: normalized
+    field: settlement_terms
+    severity: warning
+    confidence: 0.8
+    title: Settlement type unclear
+    explanation: The settlement clause "{raw}" does not state cash or physical settlement.
+    tags: [format]
+
+  - id: isda.governing_law.format
+    check: normalized
+    field: governing_law
+    severity: error
+    confidence: 0.85
+    title: Governing law not recognised
+    explanation: The governing law "{raw}" does not match a recognised jurisdiction.
+    tags: [format, legal]
+
+  # --- value consistency -----------------------------------------------------------
+  - id: isda.dates.effective_before_maturity
+    check: date_order
+    params: {earlier: effective_date, later: maturity_date}
+    severity: critical
+    confidence: 0.95
+    title: Termination date precedes effective date
+    explanation: The {later_field} ({later}) is not after the {earlier_field} ({earlier}); the transaction would end before it begins.
+    tags: [consistency]
+
+  - id: isda.dates.trade_before_effective
+    check: date_order
+    params: {earlier: trade_date, later: effective_date, allow_equal: true}
+    severity: error
+    confidence: 0.9
+    title: Effective date precedes trade date
+    explanation: The {later_field} ({later}) is before the {earlier_field} ({earlier}).
+    tags: [consistency]
+
+  - id: isda.tenor.range
+    check: tenor_range
+    params: {start: effective_date, end: maturity_date, min_years: 0.02, max_years: 50}
+    severity: warning
+    confidence: 0.8
+    title: Unusual tenor
+    explanation: The tenor of {years} years is outside the {min}-{max} year range typical for this product.
+    tags: [plausibility]
+
+  - id: isda.notional.range
+    check: range
+    field: notional_amount
+    params: {path: amount, min: 100000, max: 2000000000}
+    severity: warning
+    confidence: 0.75
+    title: Notional outside typical range
+    explanation: Notional of {value} {currency} is outside the {min}-{max} range typical for a vanilla transaction; verify it is not a units or OCR error.
+    tags: [plausibility]
+
+  - id: isda.currency.consistent
+    check: consistency
+    field: currency
+    params: {path: currency, other_field: notional_amount, other_path: currency}
+    severity: error
+    confidence: 0.9
+    title: Currency mismatch
+    explanation: The stated currency ({value}) differs from the currency of the {other_field} ({other_value}).
+    tags: [consistency]
+
+  - id: isda.counterparties.distinct
+    check: distinct_values
+    field: counterparty
+    params: {path: key}
+    severity: error
+    confidence: 0.9
+    title: Same entity named for both parties
+    explanation: '"{value}" and "{other}" resolve to the same legal entity; a party cannot face itself.'
+    tags: [consistency]
+
+  - id: isda.fixed_rate.range
+    check: range
+    field: interest_rate
+    params: {path: rate_pct, min: 0, max: 15, when: {path: type, equals: fixed}}
+    severity: warning
+    confidence: 0.8
+    title: Fixed rate off-market
+    explanation: A fixed rate of {value}% is outside the {min}-{max}% range expected for a vanilla swap.
+    tags: [plausibility]
+
+  - id: isda.spread.range
+    check: range
+    field: interest_rate
+    params: {path: spread_bps, min: -200, max: 1000}
+    severity: warning
+    confidence: 0.75
+    title: Spread off-market
+    explanation: A spread of {value} bps is outside the {min} to {max} bps range expected over the benchmark.
+    tags: [plausibility]
+
+  - id: isda.benchmark.discontinued
+    check: forbidden_values
+    field: interest_rate
+    params: {path: benchmark, values: [LIBOR]}
+    severity: error
+    confidence: 0.95
+    title: Discontinued benchmark referenced
+    explanation: The floating rate references {value}, which has ceased publication; new transactions should reference a risk-free rate such as SOFR or SONIA.
+    tags: [regulatory]
+
+  - id: isda.governing_law.allowed
+    check: allowed_values
+    field: governing_law
+    params: {path: jurisdiction, values: [England and Wales, New York]}
+    severity: warning
+    confidence: 0.8
+    title: Non-standard governing law
+    explanation: Governing law is {value}; ISDA documentation is conventionally governed by {allowed}. Confirm the election is intended.
+    tags: [legal]
+
+  - id: isda.documentation.isda
+    check: regex
+    field: documentation
+    params: {path: text, pattern: "isda"}
+    severity: warning
+    confidence: 0.8
+    title: Documentation is not ISDA
+    explanation: The documentation clause "{raw}" does not reference an ISDA Master Agreement, yet the ISDA rule pack was applied.
+    tags: [legal]
+
+  # --- extraction quality ----------------------------------------------------------
+  - id: isda.extraction.low_confidence
+    check: min_confidence
+    params: {threshold: 0.7}
+    severity: info
+    confidence: 0.6
+    title: Low extraction confidence
+    explanation: The {field_label} value "{raw}" was extracted with confidence {confidence} (below {threshold}); please verify it against the source.
+    tags: [quality]
+
+cross_document_rules:
+  - id: isda.xdoc.notional
+    check: cross_doc_equal
+    field: notional_amount
+    params: {path: amount, tolerance: 0}
+    severity: critical
+    confidence: 0.95
+    title: Notional differs from related document
+    explanation: This document states a notional of {raw} but the related document states {related_raw}.
+    tags: [cross_document]
+
+  - id: isda.xdoc.maturity
+    check: cross_doc_equal
+    field: maturity_date
+    params: {path: date}
+    severity: critical
+    confidence: 0.95
+    title: Termination date differs from related document
+    explanation: This document states {raw} but the related document states {related_raw}.
+    tags: [cross_document]
+
+  - id: isda.xdoc.effective_date
+    check: cross_doc_equal
+    field: effective_date
+    params: {path: date}
+    severity: error
+    confidence: 0.9
+    title: Effective date differs from related document
+    explanation: This document states {raw} but the related document states {related_raw}.
+    tags: [cross_document]
+
+  - id: isda.xdoc.fixed_rate
+    check: cross_doc_equal
+    field: interest_rate
+    params: {path: rate_pct}
+    severity: error
+    confidence: 0.9
+    title: Fixed rate differs from related document
+    explanation: This document states {raw} but the related document states {related_raw}.
+    tags: [cross_document]
+
+  - id: isda.xdoc.parties
+    check: cross_doc_set_equal
+    field: counterparty
+    params: {path: key}
+    severity: error
+    confidence: 0.85
+    title: Counterparties differ from related document
+    explanation: "Parties only in this document: {only_here}. Parties only in the related document: {only_related}."
+    tags: [cross_document]
+
+  - id: isda.xdoc.governing_law
+    check: cross_doc_equal
+    field: governing_law
+    params: {path: jurisdiction}
+    severity: error
+    confidence: 0.9
+    title: Governing law differs from related document
+    explanation: This document elects {value} but the related document elects {related_value}.
+    tags: [cross_document, legal]

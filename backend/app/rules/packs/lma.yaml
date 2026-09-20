@@ -1,0 +1,303 @@
+# LMA-style loan market term sheet conventions (syndicated / bilateral facilities).
+
+key: lma
+name: LMA Loan Facility Term Sheet
+version: "1.0.0"
+description: >
+  Mandatory commercial and legal terms for loan facility term sheets documented on
+  Loan Market Association standard forms (term loans, revolving credit facilities).
+applies_to: [lma, facility, borrower, lender, loan, margin, utilisation, revolving, term loan, facility agent]
+
+routing:
+  auto_approve_confidence: 0.85
+  block_severities: [error, critical]
+  min_auto_approve_score: 0.7
+
+ml:
+  enabled: true
+  severity: warning
+  anomaly_threshold: 0.6
+
+rules:
+  # --- mandatory clauses -----------------------------------------------------------
+  - id: lma.facility_amount.present
+    check: presence
+    field: notional_amount
+    severity: critical
+    confidence: 0.95
+    title: Facility amount missing
+    explanation: No facility / commitment amount was found. A facility term sheet must state the total commitments.
+    tags: [mandatory]
+
+  - id: lma.borrower.present
+    check: regex
+    field: counterparty
+    params: {path: role, pattern: "^(borrower|obligor|client)$"}
+    severity: info
+    confidence: 0.5
+    title: Party role check
+    explanation: Party "{raw}" is not the borrower.
+    enabled: false   # kept as an example of a disabled rule; superseded by lma.parties.present
+    tags: [mandatory]
+
+  - id: lma.parties.present
+    check: min_count
+    field: counterparty
+    params: {min: 2}
+    severity: critical
+    confidence: 0.95
+    title: Borrower and lender not both identified
+    explanation: Only {count} party was identified; the term sheet must name at least the borrower and a lender or arranger.
+    tags: [mandatory]
+
+  - id: lma.maturity.present
+    check: presence
+    field: maturity_date
+    severity: critical
+    confidence: 0.95
+    title: Final maturity date missing
+    explanation: No final maturity date or tenor was found.
+    tags: [mandatory]
+
+  - id: lma.rate.present
+    check: presence
+    field: interest_rate
+    severity: error
+    confidence: 0.9
+    title: Interest rate missing
+    explanation: No interest rate (benchmark plus margin) was found.
+    tags: [mandatory]
+
+  - id: lma.margin.present
+    check: presence
+    field: margin
+    severity: error
+    confidence: 0.85
+    title: Margin missing
+    explanation: No margin was found. LMA facilities price as a benchmark rate plus a stated margin.
+    tags: [mandatory]
+
+  - id: lma.governing_law.present
+    check: presence
+    field: governing_law
+    severity: critical
+    confidence: 0.95
+    title: Governing law missing
+    explanation: No governing law clause was found. LMA documentation must elect a governing law (typically English law).
+    tags: [mandatory, legal]
+
+  - id: lma.purpose.present
+    check: presence
+    field: purpose
+    severity: warning
+    confidence: 0.8
+    title: Purpose / use of proceeds missing
+    explanation: No purpose clause was found; LMA facility agreements restrict how proceeds may be applied.
+    tags: [mandatory]
+
+  - id: lma.repayment.present
+    check: presence
+    field: repayment_terms
+    severity: error
+    confidence: 0.85
+    title: Repayment terms missing
+    explanation: No repayment or amortisation terms were found.
+    tags: [mandatory]
+
+  - id: lma.security.present
+    check: presence
+    field: credit_support
+    severity: warning
+    confidence: 0.7
+    title: Security / guarantee package not stated
+    explanation: No security, guarantee or credit support clause was found. Confirm whether the facility is unsecured.
+    tags: [mandatory]
+
+  - id: lma.interest_period.present
+    check: presence
+    field: payment_frequency
+    severity: warning
+    confidence: 0.75
+    title: Interest period missing
+    explanation: No interest period or payment frequency was found.
+    tags: [mandatory]
+
+  # --- format ------------------------------------------------------------------------
+  - id: lma.facility_amount.format
+    check: normalized
+    field: notional_amount
+    severity: error
+    confidence: 0.85
+    title: Facility amount unreadable
+    explanation: The facility amount "{raw}" could not be parsed into a currency and figure.
+    tags: [format]
+
+  - id: lma.maturity.format
+    check: normalized
+    field: maturity_date
+    severity: error
+    confidence: 0.85
+    title: Maturity date unreadable
+    explanation: The maturity "{raw}" could not be parsed as a date or tenor.
+    tags: [format]
+
+  - id: lma.margin.format
+    check: normalized
+    field: margin
+    severity: error
+    confidence: 0.85
+    title: Margin unreadable
+    explanation: The margin "{raw}" could not be parsed as a percentage or basis points.
+    tags: [format]
+
+  - id: lma.governing_law.format
+    check: normalized
+    field: governing_law
+    severity: error
+    confidence: 0.85
+    title: Governing law not recognised
+    explanation: The governing law "{raw}" does not match a recognised jurisdiction.
+    tags: [format, legal]
+
+  # --- consistency / plausibility ----------------------------------------------------
+  - id: lma.dates.utilisation_before_maturity
+    check: date_order
+    params: {earlier: effective_date, later: maturity_date}
+    severity: critical
+    confidence: 0.95
+    title: Maturity precedes utilisation date
+    explanation: The {later_field} ({later}) is not after the {earlier_field} ({earlier}).
+    tags: [consistency]
+
+  - id: lma.tenor.range
+    check: tenor_range
+    params: {start: effective_date, end: maturity_date, min_years: 0.1, max_years: 30}
+    severity: warning
+    confidence: 0.8
+    title: Unusual facility tenor
+    explanation: The tenor of {years} years is outside the {min}-{max} year range typical for a loan facility.
+    tags: [plausibility]
+
+  - id: lma.facility_amount.range
+    check: range
+    field: notional_amount
+    params: {path: amount, min: 500000, max: 5000000000}
+    severity: warning
+    confidence: 0.75
+    title: Facility amount outside typical range
+    explanation: Facility amount of {value} {currency} is outside the {min}-{max} range; verify it is not a units or OCR error.
+    tags: [plausibility]
+
+  - id: lma.margin.range
+    check: range
+    field: margin
+    params: {path: rate_pct, min: 0.1, max: 12, when: {path: type, equals: fixed}}
+    severity: warning
+    confidence: 0.8
+    title: Margin off-market
+    explanation: A margin of {value}% p.a. is outside the {min}-{max}% range expected for a corporate facility.
+    tags: [plausibility]
+
+  - id: lma.benchmark.discontinued
+    check: forbidden_values
+    field: interest_rate
+    params: {path: benchmark, values: [LIBOR]}
+    severity: error
+    confidence: 0.95
+    title: Discontinued benchmark referenced
+    explanation: The interest rate references {value}, which has ceased publication; sterling facilities should reference SONIA and dollar facilities SOFR.
+    tags: [regulatory]
+
+  - id: lma.currency.consistent
+    check: consistency
+    field: currency
+    params: {path: currency, other_field: notional_amount, other_path: currency}
+    severity: error
+    confidence: 0.9
+    title: Currency mismatch
+    explanation: The stated currency ({value}) differs from the currency of the {other_field} ({other_value}).
+    tags: [consistency]
+
+  - id: lma.parties.borrower_is_lender
+    check: role_conflict
+    field: counterparty
+    params:
+      path: key
+      role_path: role
+      roles_a: [borrower, obligor, client, guarantor]
+      roles_b: [lender, lenders, arranger, mandated_lead_arranger]
+    severity: error
+    confidence: 0.9
+    title: Borrower and lender are the same entity
+    explanation: '"{value_a}" ({role_a}) and "{value_b}" ({role_b}) resolve to the same legal entity; a borrower cannot lend to itself.'
+    tags: [consistency]
+
+  - id: lma.governing_law.allowed
+    check: allowed_values
+    field: governing_law
+    params: {path: jurisdiction, values: [England and Wales, New York, Scotland, Ireland]}
+    severity: warning
+    confidence: 0.8
+    title: Non-standard governing law
+    explanation: Governing law is {value}; LMA forms are conventionally governed by {allowed}. Confirm the election is intended.
+    tags: [legal]
+
+  - id: lma.documentation.lma
+    check: regex
+    field: documentation
+    params: {path: text, pattern: "lma|loan market association"}
+    severity: warning
+    confidence: 0.8
+    title: Documentation is not LMA
+    explanation: The documentation clause "{raw}" does not reference LMA standard forms, yet the LMA rule pack was applied.
+    tags: [legal]
+
+  - id: lma.extraction.low_confidence
+    check: min_confidence
+    params: {threshold: 0.7}
+    severity: info
+    confidence: 0.6
+    title: Low extraction confidence
+    explanation: The {field_label} value "{raw}" was extracted with confidence {confidence} (below {threshold}); please verify it against the source.
+    tags: [quality]
+
+cross_document_rules:
+  - id: lma.xdoc.facility_amount
+    check: cross_doc_equal
+    field: notional_amount
+    params: {path: amount, tolerance: 0}
+    severity: critical
+    confidence: 0.95
+    title: Facility amount differs from related document
+    explanation: This document states {raw} but the related document states {related_raw}.
+    tags: [cross_document]
+
+  - id: lma.xdoc.maturity
+    check: cross_doc_equal
+    field: maturity_date
+    params: {path: date}
+    severity: critical
+    confidence: 0.95
+    title: Maturity date differs from related document
+    explanation: This document states {raw} but the related document states {related_raw}.
+    tags: [cross_document]
+
+  - id: lma.xdoc.margin
+    check: cross_doc_equal
+    field: margin
+    params: {path: rate_pct}
+    severity: error
+    confidence: 0.9
+    title: Margin differs from related document
+    explanation: This document states {raw} but the related document states {related_raw}.
+    tags: [cross_document]
+
+  - id: lma.xdoc.parties
+    check: cross_doc_set_equal
+    field: counterparty
+    params: {path: key}
+    severity: error
+    confidence: 0.85
+    title: Parties differ from related document
+    explanation: "Parties only in this document: {only_here}. Parties only in the related document: {only_related}."
+    tags: [cross_document]
