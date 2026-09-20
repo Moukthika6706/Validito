@@ -1,0 +1,10 @@
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+storage/
+uploads/
+app/ml/artifacts/
+*.db
+.env
+dev.db

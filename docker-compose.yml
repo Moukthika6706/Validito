@@ -1,0 +1,99 @@
+# Validito local stack: MySQL + Redis + API + Celery worker + React frontend.
+#
+#   docker compose up --build
+#   open http://localhost:5173        (UI)      demo logins in README
+#   open http://localhost:5173/docs   (Swagger, proxied to the API)
+#
+# The worker is the only service that does OCR / ML; scale it independently:
+#   docker compose up --scale worker=3
+
+services:
+  mysql:
+    image: mysql:8.4
+    environment:
+      MYSQL_DATABASE: ${MYSQL_DB:-validito}
+      MYSQL_USER: ${MYSQL_USER:-validito}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-validito}
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-root}
+    command: --character-set-server=utf8mb4 --collation-server=utf8mb4_unicode_ci
+    volumes:
+      - mysql_data:/var/lib/mysql
+    ports:
+      - "3306:3306"
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-uroot", "-p${MYSQL_ROOT_PASSWORD:-root}"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  api:
+    build: ./backend
+    command: api
+    environment: &backend_env
+      APP_ENV: ${APP_ENV:-development}
+      SECRET_KEY: ${SECRET_KEY:-change-me-to-a-long-random-string-of-at-least-32-bytes}
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:5173,http://localhost}
+      MYSQL_HOST: mysql
+      MYSQL_PORT: 3306
+      MYSQL_DB: ${MYSQL_DB:-validito}
+      MYSQL_USER: ${MYSQL_USER:-validito}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-validito}
+      REDIS_URL: redis://redis:6379/0
+      STORAGE_DIR: /data/storage
+      ML_MODEL_DIR: /data/ml
+      OCR_USE_GPU: "false"
+      SEED_DEMO_DATA: ${SEED_DEMO_DATA:-true}
+      SEED_SAMPLES: ${SEED_SAMPLES:-1}
+    volumes:
+      - storage:/data/storage
+      - ml_models:/data/ml
+      - ./samples:/samples:ro
+    ports:
+      - "8000:8000"
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  worker:
+    build: ./backend
+    command: worker
+    environment:
+      <<: *backend_env
+      CELERY_CONCURRENCY: ${CELERY_CONCURRENCY:-2}
+    volumes:
+      - storage:/data/storage
+      - ml_models:/data/ml
+    depends_on:
+      api:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  frontend:
+    build: ./frontend
+    ports:
+      - "5173:80"
+    depends_on:
+      - api
+
+volumes:
+  mysql_data:
+  storage:
+  ml_models:
