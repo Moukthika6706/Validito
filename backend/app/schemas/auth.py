@@ -10,7 +10,8 @@ class UserCreate(BaseModel):
     email: EmailStr
     password: str = Field(min_length=8, max_length=128)
     full_name: str = Field(min_length=1, max_length=255)
-    # Self-registration is always analyst; admins promote via the users endpoint.
+    # Honoured only when ALLOW_SELF_ROLE_SELECTION is true; otherwise new accounts are analysts.
+    role: UserRole | None = None
 
 
 class UserOut(ORMModel):

@@ -1,0 +1,76 @@
+/* ------------------------------------------------------------------------------------------
+   Validito design tokens.
+   Warm editorial fintech: cream ground, one orange glow used as light (never as fill),
+   condensed all-caps display type, black pill buttons as the single hard-contrast element.
+   ------------------------------------------------------------------------------------------ */
+:root {
+  /* surfaces */
+  --bg: #f5f4f2;
+  --bg-elev: #faf9f7;
+  --surface: rgba(255, 255, 255, 0.72);
+  --surface-solid: #ffffff;
+  --surface-muted: rgba(255, 255, 255, 0.45);
+  --line: rgba(28, 25, 23, 0.08);
+  --line-strong: rgba(28, 25, 23, 0.16);
+
+  /* ink */
+  --ink: #1c1917;
+  --ink-2: #57534e;
+  --ink-3: #8a8580;
+  --ink-inverse: #ffffff;
+
+  /* the one accent: orange, used as glow / light */
+  --glow-1: #ff8a3d;
+  --glow-2: #ffb26b;
+  --glow-3: #ffd7b5;
+  --accent: #f26b1d; /* rare: small text / meter fill */
+
+  /* semantic (kept soft, low saturation) */
+  --ok: #1f7a4d;
+  --ok-bg: #e3f3ea;
+  --warn: #b45f06;
+  --warn-bg: #fdecd6;
+  --bad: #b3261e;
+  --bad-bg: #fbe4e2;
+  --crit: #7a1a12;
+  --crit-bg: #f6d3cf;
+  --info: #2d4f8f;
+  --info-bg: #e2e9f6;
+  --neutral: #57534e;
+  --neutral-bg: #ebe9e6;
+
+  /* type */
+  --font-display: 'Archivo', 'Arial Narrow', Impact, sans-serif;
+  --font-body: 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-mono: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+
+  --fs-hero: clamp(44px, 6.4vw, 92px);
+  --fs-h1: clamp(34px, 4vw, 56px);
+  --fs-h2: 28px;
+  --fs-h3: 18px;
+  --fs-body: 14px;
+  --fs-small: 12px;
+  --fs-micro: 11px;
+
+  /* spacing */
+  --s-1: 4px;
+  --s-2: 8px;
+  --s-3: 12px;
+  --s-4: 16px;
+  --s-5: 24px;
+  --s-6: 32px;
+  --s-7: 48px;
+  --s-8: 72px;
+  --s-9: 112px;
+
+  /* radius / shadow */
+  --r-sm: 10px;
+  --r-md: 18px;
+  --r-lg: 28px;
+  --r-pill: 999px;
+  --shadow-card: 0 1px 2px rgba(28, 25, 23, 0.04), 0 12px 32px -12px rgba(28, 25, 23, 0.12);
+  --shadow-float: 0 20px 60px -20px rgba(28, 25, 23, 0.25);
+
+  --content-max: 1280px;
+  --nav-h: 64px;
+}

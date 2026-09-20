@@ -48,6 +48,9 @@ class Settings(BaseSettings):
     # Routing
     auto_approve_confidence: float = 0.85
 
+    # Demo convenience: let sign-up choose a role. Disable in production (admins assign roles).
+    allow_self_role_selection: bool = True
+
     @computed_field  # type: ignore[prop-decorator]
     @property
     def sqlalchemy_url(self) -> str:
