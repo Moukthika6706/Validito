@@ -1,320 +1,263 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { documents, review } from '../api/endpoints'
-import { Alert, ConfidenceBar, EmptyState, ErrorState, Field, FlagStatusBadge, JsonView, Loading, SeverityBadge, SourceBadge, StatusBadge } from '../components/ui'
+import Button from '../components/Button'
+import ClauseCard from '../components/ClauseCard'
+import GlowBackground from '../components/GlowBackground'
+import { EmptyState, ErrorState, Field, Loading, Notice } from '../components/States'
+import { StatusPill } from '../components/StatusPill'
+import { useAuth } from '../context/AuthContext'
 import { useAsync } from '../hooks/useAsync'
-import { fmtConfidence, fmtDate, fmtNormalized, humanize } from '../utils/format'
+import { fmtNormalized, humanize } from '../utils/format'
+
+const IN_FLIGHT = new Set(['uploaded', 'processing', 'extracted', 'validated'])
+const SEV_RANK = { critical: 3, error: 2, warning: 1, info: 0 }
+const PIPELINE = ['uploaded', 'processing', 'extracted', 'validated', 'decided']
 
 export default function ReviewDocument() {
   const { id } = useParams()
   const navigate = useNavigate()
+  const { isReviewer } = useAuth()
   const [params, setParams] = useSearchParams()
-  const doc = useAsync(() => documents.get(id), [id])
-  const text = useAsync(() => documents.text(id), [id])
-  const flags = useAsync(() => documents.flags(id), [id])
   const [notice, setNotice] = useState(null)
-  const [showResolved, setShowResolved] = useState(false)
+  const [docTab, setDocTab] = useState('original')
+  const [focusEntity, setFocusEntity] = useState(null)
 
-  const list = useMemo(() => (flags.data || []).filter((f) => f.status !== 'superseded' && (showResolved || f.status === 'open')), [flags.data, showResolved])
-  const selectedId = Number(params.get('flag')) || list[0]?.id
-  const selected = list.find((f) => f.id === selectedId) || (flags.data || []).find((f) => f.id === selectedId)
-  const openCount = (flags.data || []).filter((f) => f.status === 'open').length
+  const shouldPoll = useCallback((d) => !d || IN_FLIGHT.has(d.status), [])
+  const doc = useAsync(() => documents.get(id), [id], { interval: 2500, shouldPoll })
+  const status = doc.data?.status
+  const flags = useAsync(() => (status && !IN_FLIGHT.has(status) ? documents.flags(id) : Promise.resolve(null)), [id, status])
+  const text = useAsync(() => (status && !IN_FLIGHT.has(status) ? documents.text(id) : Promise.resolve(null)), [id, status])
+
+  const expandedId = Number(params.get('flag')) || null
+  const setExpanded = (fid) => setParams(fid ? { flag: fid } : {}, { replace: true })
+
+  const { open, resolved, cleanEntities } = useMemo(() => {
+    const all = (flags.data || []).filter((f) => f.status !== 'superseded')
+    const open = all.filter((f) => f.status === 'open').sort((a, b) => SEV_RANK[b.severity] - SEV_RANK[a.severity] || a.confidence - b.confidence)
+    const resolved = all.filter((f) => f.status !== 'open')
+    const flaggedEntityIds = new Set(all.map((f) => f.entity_id).filter(Boolean))
+    const cleanEntities = (doc.data?.entities || []).filter((e) => !flaggedEntityIds.has(e.id))
+    return { open, resolved, cleanEntities }
+  }, [flags.data, doc.data])
 
   useEffect(() => {
-    if (!params.get('flag') && list[0]) setParams({ flag: list[0].id }, { replace: true })
-  }, [list, params, setParams])
+    if (!expandedId && open[0]) setExpanded(open[0].id)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open.length])
 
-  const select = (fid) => setParams({ flag: fid })
-  const idx = list.findIndex((f) => f.id === selectedId)
-  const goto = (delta) => {
-    const next = list[idx + delta]
-    if (next) select(next.id)
-  }
-
-  const afterAction = async (msg) => {
-    setNotice({ tone: 'success', text: msg })
-    await flags.reload(true)
-    const remaining = (await flags.reload(true))?.filter((f) => f.status === 'open') || []
-    if (remaining.length && !remaining.find((f) => f.id === selectedId)) select(remaining[0].id)
+  const onAct = async (flag, payload) => {
+    await review.act(flag.id, payload)
+    setNotice({ tone: 'ok', text: { accept: 'Flag confirmed and recorded.', reject: 'Rejected as a false positive — this feeds back into future confidence for the rule.', override: 'Override saved.' }[payload.action] })
+    const fresh = await flags.reload(true)
+    const nextOpen = (fresh || []).filter((f) => f.status === 'open')
+    if (nextOpen.length && !nextOpen.find((f) => f.id === expandedId)) setExpanded(nextOpen[0].id)
     doc.reload(true)
   }
 
-  if (doc.loading && !doc.data) return <Loading label="Loading review…" />
-  if (doc.error) return <ErrorState error={doc.error} onRetry={doc.reload} />
+  if (doc.loading && !doc.data) return <Loading label="Loading document" />
+  if (doc.error) return <div className="page"><ErrorState error={doc.error} onRetry={doc.reload} /></div>
   const d = doc.data
+  const inFlight = IN_FLIGHT.has(d.status)
 
   return (
-    <>
-      <div className="page-header">
-        <div>
-          <div className="muted small">
-            <Link to="/review">Review queue</Link> / <Link to={`/documents/${d.id}`}>#{d.id}</Link>
-          </div>
-          <h1>Review: {d.original_filename}</h1>
-          <p>
-            {d.rule_pack_key?.toUpperCase()} rule pack · {openCount} open flag{openCount === 1 ? '' : 's'} · uploaded {fmtDate(d.created_at)}
-          </p>
+    <div className="review-shell">
+      <div className="review-bar">
+        <div className="title">
+          <Link to={isReviewer ? '/queue' : '/'} className="small muted nowrap">
+            ← {isReviewer ? 'Back to queue' : 'Home'}
+          </Link>
+          <strong title={d.original_filename}>{d.original_filename}</strong>
+          <StatusPill status={d.status} outcome={d.review_outcome} />
+          <span className="micro muted nowrap">
+            {d.rule_pack_key ? d.rule_pack_key.toUpperCase() : 'auto'} · {open.length} open flag{open.length === 1 ? '' : 's'}
+          </span>
         </div>
-        <div className="toolbar">
-          <StatusBadge status={d.status} outcome={d.review_outcome} />
-          <CompleteButton document={d} openCount={openCount} onDone={() => navigate('/review')} />
+        <div className="row" style={{ gap: 8 }}>
+          {!inFlight && (
+            <Button variant="ghost" size="sm" onClick={() => act(() => documents.revalidate(d.id), 'Re-validation queued.', setNotice, doc)}>
+              Re-validate
+            </Button>
+          )}
+          {isReviewer && !inFlight && <CompleteReview document={d} openCount={open.length} onDone={() => navigate('/queue')} />}
         </div>
       </div>
 
-      {notice && <Alert tone={notice.tone}>{notice.text}</Alert>}
-      {d.status === 'reviewed' && <Alert tone="info">This document has already been completed ({d.review_outcome}). Actions here are still recorded in the audit trail.</Alert>}
-
-      <div className="review-layout">
-        <div>
-          <div className="card-header">
-            <h2 style={{ margin: 0 }}>Flags</h2>
-            <label className="small muted" style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
-              <input type="checkbox" checked={showResolved} onChange={(e) => setShowResolved(e.target.checked)} /> show resolved
-            </label>
+      <div className="review-panes">
+        <div className="pane pane-doc">
+          <div className="pane-tabs">
+            <button className={docTab === 'original' ? 'active' : ''} onClick={() => setDocTab('original')}>Original</button>
+            <button className={docTab === 'text' ? 'active' : ''} onClick={() => setDocTab('text')}>Extracted text</button>
           </div>
-          {flags.loading && !flags.data && <Loading />}
-          {flags.data && list.length === 0 && (
-            <EmptyState title={openCount === 0 ? 'All flags resolved' : 'Nothing to show'}>{openCount === 0 ? 'Complete the review to record the final outcome.' : 'Tick "show resolved" to see handled flags.'}</EmptyState>
-          )}
-          <div className="flag-list">
-            {list.map((f) => (
-              <div key={f.id} className={`flag-item ${f.id === selectedId ? 'active' : ''}`} onClick={() => select(f.id)}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', gap: 6 }}>
-                  <SeverityBadge severity={f.severity} />
-                  <span className="muted small">{fmtConfidence(f.confidence)}</span>
-                </div>
-                <span className="flag-item-title">{f.title}</span>
-                <div style={{ display: 'flex', justifyContent: 'space-between', gap: 6 }}>
-                  <SourceBadge source={f.source} />
-                  {f.status !== 'open' && <FlagStatusBadge status={f.status} />}
-                </div>
-              </div>
-            ))}
-          </div>
+          {docTab === 'original' ? <OriginalPane document={d} onFallback={() => setDocTab('text')} /> : <TextPane text={text.data?.raw_text} entities={d.entities} focus={focusEntity} />}
         </div>
 
-        <div>
-          {!selected && flags.data && <EmptyState title="Select a flag">Pick a flag on the left to see the clause, the rule that fired, and act on it.</EmptyState>}
-          {selected && (
-            <FlagPanel key={selected.id} flag={selected} rawText={text.data?.raw_text} onPrev={idx > 0 ? () => goto(-1) : null} onNext={idx < list.length - 1 ? () => goto(1) : null} onActed={afterAction} />
-          )}
-        </div>
-      </div>
-    </>
-  )
-}
+        <div className="pane pane-flags">
+          <GlowBackground position="corner" soft />
+          <div className="above">
+            {notice && <Notice tone={notice.tone}>{notice.text}</Notice>}
+            {inFlight && <ProcessingState status={d.status} />}
+            {d.status === 'failed' && <Notice tone="bad">Processing failed: {d.error_message || 'unknown error'}. Fix the file or re-process.</Notice>}
+            {d.status === 'auto_approved' && (
+              <Notice tone="ok">Auto-approved — every rule passed with high confidence{resolved.length + open.length ? ` (${resolved.length + open.length} informational note${resolved.length + open.length === 1 ? '' : 's'})` : ''}.</Notice>
+            )}
+            {d.status === 'reviewed' && <Notice tone={d.review_outcome === 'approved' ? 'ok' : 'bad'}>Review complete — final outcome <strong>&nbsp;{d.review_outcome}</strong>.</Notice>}
 
-function FlagPanel({ flag, rawText, onPrev, onNext, onActed }) {
-  const [comment, setComment] = useState('')
-  const [override, setOverride] = useState('')
-  const [mode, setMode] = useState(null) // 'override' shows the value box
-  const [busy, setBusy] = useState(false)
-  const [error, setError] = useState(null)
-  const entity = flag.entity
-  const ev = flag.evidence || {}
-  const snap = flag.rule_snapshot || {}
-
-  const act = async (action) => {
-    setBusy(true)
-    setError(null)
-    try {
-      let override_value = null
-      if (action === 'override') {
-        if (!override.trim()) throw new Error('Enter the corrected value.')
-        try {
-          override_value = JSON.parse(override)
-        } catch {
-          override_value = { value: override.trim() }
-        }
-      }
-      await review.act(flag.id, { action, comment: comment || null, override_value })
-      setComment('')
-      setOverride('')
-      setMode(null)
-      onActed(
-        {
-          accept: 'Flag accepted — the issue is confirmed and recorded.',
-          reject: 'Flag rejected as a false positive. This feeds back into future confidence for this rule.',
-          override: 'Override recorded with your corrected value.',
-        }[action],
-      )
-    } catch (e) {
-      setError(e.detail || e.message)
-    } finally {
-      setBusy(false)
-    }
-  }
-
-  return (
-    <div className="card">
-      <div className="card-header">
-        <div>
-          <SeverityBadge severity={flag.severity} /> <SourceBadge source={flag.source} /> <FlagStatusBadge status={flag.status} />
-          <h2 style={{ marginTop: 8 }}>{flag.title}</h2>
-        </div>
-        <div className="btn-group">
-          <button className="btn btn-sm" disabled={!onPrev} onClick={onPrev}>
-            ‹ Prev
-          </button>
-          <button className="btn btn-sm" disabled={!onNext} onClick={onNext}>
-            Next ›
-          </button>
-        </div>
-      </div>
-
-      <div className="side-by-side">
-        <div className="panel">
-          <h3>Extracted clause</h3>
-          {entity ? (
-            <>
-              <div className="clause">{entity.raw_text}</div>
-              <dl className="kv" style={{ marginTop: 10 }}>
-                <dt>Field</dt>
-                <dd>{humanize(entity.entity_type)}</dd>
-                <dt>Interpreted as</dt>
-                <dd>{entity.normalized_value ? fmtNormalized(entity.normalized_value) : <span className="badge badge-warning">could not parse</span>}</dd>
-                <dt>Extraction</dt>
-                <dd>
-                  {humanize(entity.extractor)} · {fmtConfidence(entity.confidence)} confidence{entity.page ? ` · page ${entity.page}` : ''}
-                </dd>
-              </dl>
-              <Context rawText={rawText} entity={entity} />
-            </>
-          ) : ev.related_document_id ? (
-            <p className="muted">Cross-document finding — compares this document with #{ev.related_document_id}. See evidence for both values.</p>
-          ) : (
-            <p className="muted">No single clause — this flag is about the document as a whole (e.g. a missing field or an unusual combination of values).</p>
-          )}
-        </div>
-
-        <div className="panel">
-          <h3>Why it was flagged</h3>
-          <div className="explanation">{flag.explanation}</div>
-          <dl className="kv" style={{ marginTop: 10 }}>
-            <dt>Rule</dt>
-            <dd className="mono">{flag.rule_id}</dd>
-            <dt>Check</dt>
-            <dd>
-              {snap.check || ev.check}
-              {snap.params && Object.keys(snap.params).length > 0 && <span className="mono muted"> {JSON.stringify(snap.params)}</span>}
-            </dd>
-            <dt>Source</dt>
-            <dd>{flag.source_description}</dd>
-            <dt>Confidence</dt>
-            <dd>
-              <ConfidenceBar value={flag.confidence} band={flag.confidence_band} />
-              {ev.calibration?.applied && (
-                <div className="muted small">
-                  Calibrated from reviewer feedback: {ev.calibration.accepted} accepted / {ev.calibration.rejected} rejected → ×{ev.calibration.multiplier}
-                </div>
-              )}
-            </dd>
-            {snap.pack && (
+            {!inFlight && (
               <>
-                <dt>Pack</dt>
-                <dd>
-                  {snap.pack.toUpperCase()} v{snap.pack_version}
-                </dd>
+                <div className="section-label">
+                  <h2 className="display display-h2">Flagged clauses</h2>
+                  <span className="small muted">{open.length}</span>
+                </div>
+                {flags.loading && !flags.data && <Loading label="Loading flags" />}
+                {flags.error && <ErrorState error={flags.error} onRetry={flags.reload} />}
+                {flags.data && open.length === 0 && (
+                  <div className="card card-quiet">
+                    <EmptyState title={resolved.length ? 'All flags resolved' : 'No flags'}>
+                      {resolved.length ? (isReviewer ? 'Record the final verdict with Complete review.' : 'A reviewer has handled every flag.') : 'Every rule check passed and the anomaly model found nothing unusual.'}
+                    </EmptyState>
+                  </div>
+                )}
+                <div className="clause-list">
+                  {open.map((f) => (
+                    <ClauseCard key={f.id} flag={f} expanded={expandedId === f.id} onToggle={() => setExpanded(expandedId === f.id ? null : f.id)} canAct={isReviewer} onAct={onAct} onFocusEntity={(e) => { setFocusEntity(e); setDocTab('text') }} />
+                  ))}
+                </div>
+
+                {resolved.length > 0 && (
+                  <>
+                    <div className="section-label">
+                      <h3 className="display display-h3">Resolved</h3>
+                      <span className="small muted">{resolved.length}</span>
+                    </div>
+                    <div className="clause-list">
+                      {resolved.map((f) => (
+                        <ClauseCard key={f.id} flag={f} muted expanded={expandedId === f.id} onToggle={() => setExpanded(expandedId === f.id ? null : f.id)} canAct={isReviewer} onAct={onAct} onFocusEntity={(e) => { setFocusEntity(e); setDocTab('text') }} />
+                      ))}
+                    </div>
+                  </>
+                )}
+
+                <div className="section-label">
+                  <h3 className="display display-h3">Clean clauses</h3>
+                  <span className="small muted">{cleanEntities.length}</span>
+                </div>
+                {cleanEntities.length === 0 ? (
+                  <p className="small muted">No other terms were extracted.</p>
+                ) : (
+                  <div className="clean-list">
+                    {cleanEntities.map((e) => (
+                      <div className="clean-item" key={e.id} onClick={() => { setFocusEntity(e); setDocTab('text') }} style={{ cursor: 'pointer' }}>
+                        <strong>{humanize(e.entity_type)}</strong>
+                        <span>{e.normalized_value ? fmtNormalized(e.normalized_value) : e.raw_text}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </>
             )}
-          </dl>
-          {flag.source === 'ml' && ev.contributions && (
-            <div style={{ marginTop: 10 }}>
-              <h3>Largest deviations from typical</h3>
-              {ev.contributions.map((c) => (
-                <div className="deviation" key={c.feature}>
-                  <span>{c.label}</span>
-                  <span>
-                    <strong>{c.value_text}</strong> <span className="muted">vs {c.typical_text}</span> <span className="badge badge-outline">{c.z_score > 0 ? '+' : ''}{c.z_score}σ</span>
-                  </span>
-                </div>
-              ))}
-              <div className="muted small" style={{ marginTop: 6 }}>
-                Isolation forest score {ev.forest_score} · deviation score {ev.deviation_score} · threshold {ev.threshold}
-              </div>
-            </div>
-          )}
-          {flag.source === 'cross_doc' && (
-            <dl className="kv" style={{ marginTop: 10 }}>
-              <dt>This document</dt>
-              <dd className="mono">{JSON.stringify(ev.value ?? ev.values)}</dd>
-              <dt>Related #{ev.related_document_id}</dt>
-              <dd className="mono">{JSON.stringify(ev.related_value ?? ev.related_values)}</dd>
-            </dl>
-          )}
-          <JsonView value={ev} collapsed label="Full evidence" />
-          <JsonView value={snap} collapsed label="Rule definition at time of flag" />
-        </div>
-      </div>
-
-      {flag.review_actions?.length > 0 && (
-        <div style={{ marginTop: 14 }}>
-          <h3>Review history</h3>
-          {flag.review_actions.map((a) => (
-            <div key={a.id} className="small" style={{ padding: '4px 0', borderBottom: '1px solid var(--border)' }}>
-              <strong>{humanize(a.action)}</strong> by {a.reviewer?.full_name || `user ${a.reviewer_id}`} · {fmtDate(a.created_at)}
-              {a.comment && <div className="muted">“{a.comment}”</div>}
-              {a.override_value && <div className="mono muted">→ {JSON.stringify(a.override_value)}</div>}
-            </div>
-          ))}
-        </div>
-      )}
-
-      <div style={{ marginTop: 16 }}>
-        {error && <Alert tone="danger">{error}</Alert>}
-        <Field label="Comment (recorded in the audit trail)">
-          <textarea value={comment} onChange={(e) => setComment(e.target.value)} placeholder="Why you are accepting, rejecting or overriding this flag" />
-        </Field>
-        {mode === 'override' && (
-          <Field label="Corrected value" hint='JSON (e.g. {"amount": 50000000, "currency": "USD"}) or plain text.'>
-            <input value={override} onChange={(e) => setOverride(e.target.value)} placeholder="The value the document should be read as" />
-          </Field>
-        )}
-        <div className="btn-group">
-          <button className="btn btn-danger" disabled={busy} onClick={() => act('accept')} title="The issue is real">
-            Accept flag (issue confirmed)
-          </button>
-          <button className="btn btn-success" disabled={busy} onClick={() => act('reject')} title="False positive">
-            Reject flag (false positive)
-          </button>
-          {mode === 'override' ? (
-            <button className="btn btn-primary" disabled={busy} onClick={() => act('override')}>
-              Save override
-            </button>
-          ) : (
-            <button className="btn" disabled={busy} onClick={() => setMode('override')}>
-              Override value…
-            </button>
-          )}
+          </div>
         </div>
       </div>
     </div>
   )
 }
 
-function Context({ rawText, entity }) {
-  if (!rawText || entity.char_start == null) return null
-  const start = Math.max(0, entity.char_start - 160)
-  const end = Math.min(rawText.length, entity.char_end + 160)
+async function act(fn, msg, setNotice, doc) {
+  try {
+    await fn()
+    setNotice({ tone: 'info', text: msg })
+    doc.reload(true)
+  } catch (e) {
+    setNotice({ tone: 'bad', text: e.detail || e.message })
+  }
+}
+
+function ProcessingState({ status }) {
+  const idx = PIPELINE.indexOf(status)
   return (
-    <details style={{ marginTop: 10 }}>
-      <summary className="small">Show in document text</summary>
-      <div className="context">
-        {rawText.slice(start, entity.char_start)}
-        <mark>{rawText.slice(entity.char_start, entity.char_end)}</mark>
-        {rawText.slice(entity.char_end, end)}
+    <div className="card">
+      <div className="row">
+        <span className="spinner" />
+        <strong>{status === 'uploaded' ? 'Queued for processing' : 'Processing'}</strong>
       </div>
-    </details>
+      <div className="timeline">
+        {PIPELINE.map((s, i) => (
+          <span key={s} className={i < idx ? 'done' : i === idx ? 'current' : ''}>{s === 'decided' ? 'decision' : s}</span>
+        ))}
+      </div>
+      <p className="small muted" style={{ margin: 0 }}>Extraction (OCR for scans), rule checks, anomaly scoring and routing run in the background. This page refreshes itself.</p>
+    </div>
   )
 }
 
-function CompleteButton({ document: d, openCount, onDone }) {
+function OriginalPane({ document: d, onFallback }) {
+  const [url, setUrl] = useState(null)
+  const [error, setError] = useState(null)
+  const renderable = d.mime_type === 'application/pdf' || d.mime_type.startsWith('image/')
+
+  useEffect(() => {
+    if (!renderable) return undefined
+    let objectUrl
+    let cancelled = false
+    ;(async () => {
+      try {
+        const token = localStorage.getItem('validito.token')
+        const res = await fetch(`${import.meta.env.VITE_API_URL || ''}/api/v1/documents/${d.id}/file`, { headers: { Authorization: `Bearer ${token}` } })
+        if (!res.ok) throw new Error(`Could not load the original (${res.status})`)
+        const blob = await res.blob()
+        objectUrl = URL.createObjectURL(blob)
+        if (!cancelled) setUrl(objectUrl)
+      } catch (e) {
+        if (!cancelled) setError(e.message)
+      }
+    })()
+    return () => {
+      cancelled = true
+      if (objectUrl) URL.revokeObjectURL(objectUrl)
+    }
+  }, [d.id, renderable])
+
+  if (!renderable) {
+    return (
+      <div className="state">
+        <p className="small muted">This is a {d.mime_type.includes('word') ? 'Word document' : 'file'} without an inline preview.</p>
+        <Button variant="secondary" size="sm" onClick={onFallback}>View extracted text</Button>
+      </div>
+    )
+  }
+  if (error) return <div className="state"><p className="state-error small">{error}</p></div>
+  if (!url) return <Loading label="Loading original" />
+  return d.mime_type === 'application/pdf' ? <iframe title="original document" src={`${url}#toolbar=0&view=FitH`} /> : <img src={url} alt="original document" />
+}
+
+function TextPane({ text, entities, focus }) {
+  const ref = useRef(null)
+  useEffect(() => {
+    if (focus && ref.current) ref.current.querySelector('mark.active')?.scrollIntoView({ block: 'center', behavior: 'smooth' })
+  }, [focus, text])
+  if (text == null) return <Loading label="Loading text" />
+  const spans = (entities || []).filter((e) => e.char_start != null && e.char_end > e.char_start).sort((a, b) => a.char_start - b.char_start)
+  const parts = []
+  let pos = 0
+  for (const e of spans) {
+    if (e.char_start < pos) continue
+    parts.push(text.slice(pos, e.char_start))
+    parts.push(<mark key={e.id} className={focus?.id === e.id ? 'active' : ''} title={humanize(e.entity_type)}>{text.slice(e.char_start, e.char_end)}</mark>)
+    pos = e.char_end
+  }
+  parts.push(text.slice(pos))
+  return <div className="doc-text" ref={ref}>{parts}</div>
+}
+
+function CompleteReview({ document: d, openCount, onDone }) {
   const [open, setOpen] = useState(false)
   const [outcome, setOutcome] = useState('approved')
   const [comment, setComment] = useState('')
   const [resolve, setResolve] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState(null)
+  const eligible = ['needs_review', 'auto_approved', 'reviewed'].includes(d.status)
 
   const submit = async () => {
     setBusy(true)
@@ -329,42 +272,43 @@ function CompleteButton({ document: d, openCount, onDone }) {
     }
   }
 
-  if (!open)
-    return (
-      <button className="btn btn-primary" onClick={() => setOpen(true)} disabled={!['needs_review', 'auto_approved', 'reviewed'].includes(d.status)}>
-        Complete review
-      </button>
-    )
   return (
-    <div className="card" style={{ margin: 0, minWidth: 320 }}>
-      <h3>Final verdict</h3>
-      {error && <Alert tone="danger">{error}</Alert>}
-      <Field label="Outcome">
-        <select value={outcome} onChange={(e) => setOutcome(e.target.value)}>
-          <option value="approved">Approved — document is acceptable</option>
-          <option value="rejected">Rejected — send back to the desk</option>
-        </select>
-      </Field>
-      {openCount > 0 && (
-        <Field label={`${openCount} flag(s) still open`} hint="Resolve them individually, or apply one action to all remaining.">
-          <select value={resolve} onChange={(e) => setResolve(e.target.value)}>
-            <option value="">— choose —</option>
-            <option value="accept">Accept all remaining (issues confirmed)</option>
-            <option value="reject">Reject all remaining (false positives)</option>
-          </select>
-        </Field>
+    <div style={{ position: 'relative' }}>
+      <Button size="sm" disabled={!eligible} onClick={() => setOpen((o) => !o)}>
+        Complete review
+      </Button>
+      {open && (
+        <div className="card card-solid" style={{ position: 'absolute', right: 0, top: 44, width: 360, zIndex: 30, boxShadow: 'var(--shadow-float)' }}>
+          <p className="eyebrow">Final verdict</p>
+          {error && <Notice tone="bad">{error}</Notice>}
+          <Field label="Outcome">
+            <select value={outcome} onChange={(e) => setOutcome(e.target.value)}>
+              <option value="approved">Approved — document is acceptable</option>
+              <option value="rejected">Rejected — send back to the desk</option>
+            </select>
+          </Field>
+          {openCount > 0 && (
+            <Field label={`${openCount} flag${openCount === 1 ? '' : 's'} still open`} hint="Resolve them one by one, or apply one action to all.">
+              <select value={resolve} onChange={(e) => setResolve(e.target.value)}>
+                <option value="">— choose —</option>
+                <option value="accept">Accept all remaining</option>
+                <option value="reject">Reject all remaining</option>
+              </select>
+            </Field>
+          )}
+          <Field label="Comment">
+            <textarea value={comment} onChange={(e) => setComment(e.target.value)} style={{ minHeight: 60 }} />
+          </Field>
+          <div className="row">
+            <Button size="sm" loading={busy} disabled={openCount > 0 && !resolve} onClick={submit}>
+              Record verdict
+            </Button>
+            <Button variant="ghost" size="sm" onClick={() => setOpen(false)}>
+              Cancel
+            </Button>
+          </div>
+        </div>
       )}
-      <Field label="Comment">
-        <textarea value={comment} onChange={(e) => setComment(e.target.value)} />
-      </Field>
-      <div className="btn-group">
-        <button className="btn btn-primary" disabled={busy || (openCount > 0 && !resolve)} onClick={submit}>
-          {busy ? 'Saving…' : 'Record verdict'}
-        </button>
-        <button className="btn" onClick={() => setOpen(false)}>
-          Cancel
-        </button>
-      </div>
     </div>
   )
 }
