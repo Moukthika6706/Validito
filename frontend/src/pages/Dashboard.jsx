@@ -1,162 +1,180 @@
 import { Link, useNavigate } from 'react-router-dom'
 import { documents, metrics } from '../api/endpoints'
-import { EmptyState, ErrorState, Loading, StatTile, StatusBadge } from '../components/ui'
+import Button from '../components/Button'
+import GlowBackground from '../components/GlowBackground'
+import StatCard from '../components/StatCard'
+import { StatusPill } from '../components/StatusPill'
+import { ErrorState, SkeletonRows } from '../components/States'
 import { useAuth } from '../context/AuthContext'
 import { useAsync } from '../hooks/useAsync'
-import { fmtPct, fmtRelative, humanize } from '../utils/format'
+import { fmtRelative } from '../utils/format'
+
+const IN_FLIGHT = new Set(['uploaded', 'processing', 'extracted', 'validated'])
 
 export default function Dashboard() {
   const { user, isReviewer } = useAuth()
   const navigate = useNavigate()
   const m = useAsync(() => metrics.summary({ days: 14 }), [], { interval: 20000 })
-  const recent = useAsync(() => documents.list({ limit: 8 }), [], { interval: 10000 })
+  const recent = useAsync(() => documents.list({ limit: 10 }), [], {
+    interval: 4000,
+    shouldPoll: (d) => !d || d.items.some((x) => IN_FLIGHT.has(x.status)),
+  })
+  const hasDocs = (recent.data?.total ?? 0) > 0
 
   return (
-    <>
-      <div className="page-header">
+    <div className="page">
+      <div className="page-head">
         <div>
-          <h1>Dashboard</h1>
-          <p>{isReviewer ? 'Portfolio-wide validation activity.' : `Your validation activity, ${user.full_name.split(' ')[0]}.`}</p>
+          <p className="eyebrow">{isReviewer ? 'Team overview' : `Welcome back, ${user.full_name.split(' ')[0]}`}</p>
+          <h1 className="display display-h1">
+            Your validation queue
+            <br />
+            at a glance
+          </h1>
         </div>
-        <div className="toolbar">
-          <Link className="btn btn-primary" to="/documents/new">
-            Upload term sheet
-          </Link>
+        <div className="row">
           {isReviewer && (
-            <Link className="btn" to="/review">
+            <Button variant="secondary" to="/queue">
               Open review queue
-            </Link>
+            </Button>
           )}
+          <Button to="/upload">Upload term sheet</Button>
         </div>
       </div>
 
-      {m.loading && !m.data && <Loading />}
-      {m.error && <ErrorState error={m.error} onRetry={m.reload} />}
-      {m.data && (
-        <>
-          <div className="grid grid-4">
-            <StatTile label="Documents processed" value={m.data.documents_total} hint={`${m.data.decided_total} reached a decision`} />
-            <StatTile
-              label="Auto-approved"
-              value={fmtPct(m.data.auto_approved_pct, 1)}
-              tone="success"
-              hint={`${m.data.auto_approved_total} of ${m.data.decided_total} needed no human review`}
-            />
-            <StatTile
-              label="Manual review reduction"
-              value={fmtPct(m.data.manual_review_reduction_pct, 1)}
-              tone="success"
-              hint="Share of documents a reviewer never had to open"
-            />
-            <StatTile
-              label="Avg time to decision"
-              value={m.data.avg_processing_seconds == null ? '—' : `${m.data.avg_processing_seconds.toFixed(1)}s`}
-              hint="Upload → routing decision"
-            />
-          </div>
+      <section style={{ position: 'relative', marginBottom: 56 }}>
+        <GlowBackground position="behind" />
+        {m.error ? (
+          <ErrorState error={m.error} onRetry={m.reload} title="Stats unavailable" />
+        ) : (
+          <StatRow data={m.data} loading={m.loading && !m.data} />
+        )}
+      </section>
 
-          <div className="grid grid-3" style={{ marginTop: 16 }}>
-            <div className="card">
-              <h2>Flags by severity</h2>
-              <Bars data={m.data.flags_by_severity} order={['critical', 'error', 'warning', 'info']} />
-              <p className="muted small" style={{ marginTop: 8 }}>
-                Avg {m.data.avg_flags_per_document} flags per decided document.
-              </p>
-            </div>
-            <div className="card">
-              <h2>Flags by source</h2>
-              <Bars data={m.data.flags_by_source} order={['rule', 'cross_doc', 'ml']} labels={{ rule: 'Rule pack', cross_doc: 'Cross-doc', ml: 'ML anomaly' }} />
-              <p className="muted small" style={{ marginTop: 8 }}>
-                Reviewer agreement: {m.data.reviewer_agreement_pct == null ? 'no reviews yet' : fmtPct(m.data.reviewer_agreement_pct, 0)}
-              </p>
-            </div>
-            <div className="card">
-              <h2>Most triggered rules</h2>
-              {m.data.top_rules.length === 0 ? (
-                <p className="muted">No flags yet.</p>
-              ) : (
-                <table>
-                  <tbody>
-                    {m.data.top_rules.slice(0, 6).map((r) => (
-                      <tr key={r.rule_id}>
-                        <td>
-                          <div>{r.title}</div>
-                          <div className="mono muted">{r.rule_id}</div>
-                        </td>
-                        <td className="right nowrap">
-                          {r.count}
-                          {r.accepted + r.rejected > 0 && (
-                            <div className="muted small">
-                              {r.accepted}✓ {r.rejected}✗
-                            </div>
-                          )}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              )}
-            </div>
+      {hasDocs ? (
+        <section>
+          <div className="spread" style={{ marginBottom: 16 }}>
+            <h2 className="display display-h2">Recent activity</h2>
+            {recent.data?.total > 10 && (
+              <Link to="/queue" className="small muted">
+                {isReviewer ? 'View the full queue' : ''}
+              </Link>
+            )}
           </div>
-        </>
+          <div className="activity">
+            {recent.data.items.map((d) => (
+              <Link key={d.id} className="activity-row" to={`/review/${d.id}`}>
+                <div>
+                  <div className="activity-name">{d.original_filename}</div>
+                  <div className="activity-meta">
+                    {d.doc_type.replace('_', ' ')} · {d.rule_pack_key ? d.rule_pack_key.toUpperCase() : 'auto-detect'}
+                    {d.ocr_used ? ' · OCR' : ''}
+                  </div>
+                </div>
+                <div className="activity-meta">{fmtRelative(d.created_at)}</div>
+                <div>
+                  <StatusPill status={d.status} outcome={d.review_outcome} />
+                </div>
+                <div className="chev">›</div>
+              </Link>
+            ))}
+          </div>
+        </section>
+      ) : recent.loading && !recent.data ? (
+        <SkeletonRows n={3} />
+      ) : recent.error ? (
+        <ErrorState error={recent.error} onRetry={recent.reload} />
+      ) : (
+        <HowItWorks onUpload={() => navigate('/upload')} />
       )}
-
-      <div className="card">
-        <div className="card-header">
-          <h2>Recent documents</h2>
-          <Link to="/documents">View all</Link>
-        </div>
-        {recent.loading && !recent.data && <Loading />}
-        {recent.error && <ErrorState error={recent.error} onRetry={recent.reload} />}
-        {recent.data && recent.data.items.length === 0 && (
-          <EmptyState title="No documents yet" action={<Link className="btn btn-primary" to="/documents/new">Upload your first term sheet</Link>}>
-            Upload a PDF, DOCX or scanned image and Validito will extract the key terms and validate them.
-          </EmptyState>
-        )}
-        {recent.data && recent.data.items.length > 0 && (
-          <table>
-            <thead>
-              <tr>
-                <th>File</th>
-                <th>Pack</th>
-                <th>Status</th>
-                <th>Uploaded</th>
-              </tr>
-            </thead>
-            <tbody>
-              {recent.data.items.map((d) => (
-                <tr key={d.id} className="clickable" onClick={() => navigate(`/documents/${d.id}`)}>
-                  <td>{d.original_filename}</td>
-                  <td>{d.rule_pack_key ? d.rule_pack_key.toUpperCase() : <span className="muted">auto</span>}</td>
-                  <td>
-                    <StatusBadge status={d.status} outcome={d.review_outcome} />
-                  </td>
-                  <td className="muted">{fmtRelative(d.created_at)}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
-      </div>
-    </>
+    </div>
   )
 }
 
-function Bars({ data, order, labels = {} }) {
-  const entries = order.filter((k) => data[k]).map((k) => [k, data[k]])
-  if (entries.length === 0) return <p className="muted">Nothing flagged.</p>
-  const max = Math.max(...entries.map(([, v]) => v))
+function StatRow({ data, loading }) {
+  const notional = data?.notional_validated || {}
+  const topCcy = Object.entries(notional).sort((a, b) => b[1] - a[1])[0]
+  const notionalText = topCcy ? compactMoney(topCcy[1]) : '0'
+  const others = Object.keys(notional).length - 1
   return (
-    <div className="progress-bars">
-      {entries.map(([k, v]) => (
-        <div className="bar" key={k}>
-          <span>{labels[k] || humanize(k)}</span>
-          <div className="bar-track">
-            <div className="bar-fill" style={{ width: `${(v / max) * 100}%` }} />
-          </div>
-          <span className="right">{v}</span>
-        </div>
-      ))}
+    <div className="stat-row">
+      <StatCard loading={loading} value={data ? data.auto_approved_pct.toFixed(0) : ''} unit="%" label="Auto-approval rate" hint={data ? `${data.auto_approved_total} of ${data.decided_total} cleared without a human` : ' '} />
+      <StatCard loading={loading} value={data?.flagged_this_week ?? ''} label="Flagged this week" hint={data ? `${data.decided_this_week} decided in the last 7 days` : ' '} />
+      <StatCard loading={loading} value={notionalText} unit={topCcy?.[0]} label="Notional validated" hint={others > 0 ? `plus ${others} other currenc${others === 1 ? 'y' : 'ies'}` : 'across decided documents'} />
+      <StatCard loading={loading} value={data?.active_rule_packs ?? ''} label="Active rule packs" hint="ISDA · LMA" />
     </div>
+  )
+}
+
+function compactMoney(n) {
+  if (n >= 1e9) return `${(n / 1e9).toFixed(1)}bn`
+  if (n >= 1e6) return `${(n / 1e6).toFixed(0)}m`
+  if (n >= 1e3) return `${(n / 1e3).toFixed(0)}k`
+  return String(Math.round(n))
+}
+
+const STEPS = [
+  { n: '01', title: 'Upload', body: 'Drop a PDF, DOCX or scan. Processing starts in the background straight away.' },
+  { n: '02', title: 'AI extracts', body: 'OCR and NER pull out notional, dates, parties, rates, governing law and more.' },
+  { n: '03', title: 'Review flags', body: 'Rule packs and an anomaly model raise flags — each one explained, with a confidence.' },
+  { n: '04', title: 'Approve or escalate', body: 'Clean documents auto-approve. Only ambiguous ones reach a reviewer.' },
+]
+
+function HowItWorks({ onUpload }) {
+  return (
+    <section className="how" style={{ position: 'relative' }}>
+      <div>
+        <p className="eyebrow">How it works</p>
+        <h2 className="display display-h1" style={{ marginBottom: 20 }}>
+          Nothing to review yet
+        </h2>
+        <div className="how-steps">
+          {STEPS.map((s) => (
+            <div className="how-step" key={s.n}>
+              <div className="how-num">{s.n}</div>
+              <div>
+                <strong>{s.title}</strong>
+                <span>{s.body}</span>
+              </div>
+            </div>
+          ))}
+        </div>
+        <Button size="lg" onClick={onUpload} style={{ marginTop: 24 }}>
+          Upload your first term sheet
+        </Button>
+      </div>
+      <div className="how-visual">
+        <GlowBackground position="right" soft />
+        <div className="mock above">
+          <div className="card card-tight">
+            <div className="spread">
+              <div>
+                <div style={{ fontWeight: 600 }}>isda_irs_clean.pdf</div>
+                <div className="micro muted">18 terms extracted</div>
+              </div>
+              <StatusPill status="auto_approved" />
+            </div>
+          </div>
+          <div className="card card-tight">
+            <div className="spread">
+              <div>
+                <div style={{ fontWeight: 600 }}>isda_irs_faulty.pdf</div>
+                <div className="micro muted">9 flags · lowest confidence 50%</div>
+              </div>
+              <StatusPill status="needs_review" />
+            </div>
+          </div>
+          <div className="card card-tight">
+            <div className="spread">
+              <div>
+                <div style={{ fontWeight: 600 }}>lma_term_loan.docx</div>
+                <div className="micro muted">running rule pack LMA</div>
+              </div>
+              <StatusPill status="processing" />
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
   )
 }
