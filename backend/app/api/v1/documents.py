@@ -1,7 +1,10 @@
 from typing import Annotated
 
 from fastapi import APIRouter, File, Form, Query, UploadFile
+from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
+
+from app.ingestion.storage import absolute_path
 
 from app.api.deps import DB, CurrentUser
 from app.models import DocumentStatus, DocumentType, User
@@ -66,6 +69,13 @@ def get_entities(document_id: int, user: User = CurrentUser, db: Session = DB):
 def get_text(document_id: int, user: User = CurrentUser, db: Session = DB):
     document = svc.get_document_or_404(db, document_id, user)
     return DocumentTextOut(id=document.id, raw_text=document.raw_text, page_count=document.page_count, ocr_used=document.ocr_used)
+
+
+@router.get("/{document_id}/file", summary="Download / render the original upload")
+def get_file(document_id: int, user: User = CurrentUser, db: Session = DB):
+    document = svc.get_document_or_404(db, document_id, user)
+    return FileResponse(absolute_path(document.storage_path), media_type=document.mime_type, filename=document.original_filename,
+                        content_disposition_type="inline")
 
 
 @router.post("/{document_id}/reprocess", response_model=DocumentOut, status_code=202, summary="Re-run extraction + validation")

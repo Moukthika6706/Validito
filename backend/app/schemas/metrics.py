@@ -32,3 +32,7 @@ class MetricsSummary(BaseModel):
     review_actions: dict[str, int]
     reviewer_agreement_pct: float | None
     daily: list[DailyCount]
+    decided_this_week: int = 0
+    flagged_this_week: int = 0
+    notional_validated: dict[str, float] = {}
+    active_rule_packs: int = 0

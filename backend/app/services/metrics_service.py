@@ -4,7 +4,7 @@ from datetime import datetime, timedelta, timezone
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from app.models import Document, DocumentStatus, Flag, FlagStatus, ReviewAction, ReviewActionRecord, User, UserRole, ValidationRun
+from app.models import Document, DocumentStatus, ExtractedEntity, Flag, FlagStatus, ReviewAction, ReviewActionRecord, RulePack, User, UserRole, ValidationRun
 
 DECIDED = {DocumentStatus.auto_approved, DocumentStatus.needs_review, DocumentStatus.reviewed}
 
@@ -66,6 +66,26 @@ def summary(db: Session, user: User, *, days: int = 14) -> dict:
         for rid, n in rule_counts.most_common(10)
     ]
 
+    week_ago = datetime.now(timezone.utc) - timedelta(days=7)
+    def _aware(dt):
+        return dt if dt.tzinfo else dt.replace(tzinfo=timezone.utc)
+    this_week = [d for d in decided if _aware(d.created_at) >= week_ago]
+    flagged_this_week = sum(1 for d in this_week if latest_runs.get(d.id) and latest_runs[d.id].routing_decision and latest_runs[d.id].routing_decision.value == "needs_review")
+
+    # Notional validated: sum of the best notional per decided document, grouped by currency.
+    notional_by_ccy: dict[str, float] = defaultdict(float)
+    if decided:
+        decided_ids = [d.id for d in decided]
+        best: dict[int, ExtractedEntity] = {}
+        for e in db.execute(select(ExtractedEntity).where(ExtractedEntity.document_id.in_(decided_ids), ExtractedEntity.entity_type == "notional_amount")).scalars():
+            if e.document_id not in best or e.confidence > best[e.document_id].confidence:
+                best[e.document_id] = e
+        for e in best.values():
+            nv = e.normalized_value or {}
+            if isinstance(nv.get("amount"), (int, float)):
+                notional_by_ccy[nv.get("currency") or "???"] += float(nv["amount"])
+    active_packs = db.execute(select(func.count(RulePack.id)).where(RulePack.is_active.is_(True))).scalar_one()
+
     today = datetime.now(timezone.utc).date()
     daily = []
     for i in range(days - 1, -1, -1):
@@ -94,4 +114,8 @@ def summary(db: Session, user: User, *, days: int = 14) -> dict:
         "review_actions": dict(action_counts),
         "reviewer_agreement_pct": agreement,
         "daily": daily,
+        "decided_this_week": len(this_week),
+        "flagged_this_week": flagged_this_week,
+        "notional_validated": {k: round(v, 2) for k, v in notional_by_ccy.items()},
+        "active_rule_packs": active_packs,
     }

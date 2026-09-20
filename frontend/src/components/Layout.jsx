@@ -1,7 +1,7 @@
 import { NavLink, Outlet, useNavigate } from 'react-router-dom'
+import { review } from '../api/endpoints'
 import { useAuth } from '../context/AuthContext'
 import { useAsync } from '../hooks/useAsync'
-import { review } from '../api/endpoints'
 
 export default function Layout() {
   const { user, logout, isReviewer, isAdmin } = useAuth()
@@ -10,45 +10,31 @@ export default function Layout() {
   const pending = queue.data?.total ?? 0
 
   return (
-    <div className="app">
-      <aside className="sidebar">
-        <div className="brand">
-          <span className="brand-mark">V</span>
-          <span>
-            Validito
-            <small>Term sheet validation</small>
-          </span>
-        </div>
-        <nav>
+    <div className="shell">
+      <header className="nav">
+        <NavLink to="/" className="wordmark">
+          Validito
+        </NavLink>
+        <nav className="nav-links">
           <NavLink to="/" end>
-            Dashboard
+            Home
           </NavLink>
-          <NavLink to="/documents">Documents</NavLink>
-          <NavLink to="/documents/new" className="nav-sub">
-            + Upload
-          </NavLink>
+          <NavLink to="/upload">Upload</NavLink>
           {isReviewer && (
-            <NavLink to="/review">
-              Review queue {pending > 0 && <span className="pill">{pending}</span>}
+            <NavLink to="/queue">
+              Queue {pending > 0 && <span className="count-pill">{pending}</span>}
             </NavLink>
           )}
-          <NavLink to="/audit">Audit trail</NavLink>
-          {isAdmin && (
-            <>
-              <div className="nav-section">Admin</div>
-              <NavLink to="/admin/rule-packs">Rule packs</NavLink>
-              <NavLink to="/admin/users">Users</NavLink>
-            </>
-          )}
+          <NavLink to="/audit">Audit</NavLink>
+          {isAdmin && <NavLink to="/admin/rules">Rules</NavLink>}
+          {isAdmin && <NavLink to="/admin/users">Users</NavLink>}
         </nav>
-        <div className="sidebar-footer">
-          <div>
-            <strong>{user?.full_name}</strong>
-            <small className="muted">{user?.email}</small>
-            <span className={`badge badge-role role-${user?.role}`}>{user?.role}</span>
-          </div>
+        <div className="nav-right">
+          <span title={user?.email}>
+            {user?.full_name} · {user?.role}
+          </span>
           <button
-            className="btn btn-sm"
+            className="link"
             onClick={() => {
               logout()
               navigate('/login')
@@ -57,10 +43,8 @@ export default function Layout() {
             Sign out
           </button>
         </div>
-      </aside>
-      <main className="content">
-        <Outlet />
-      </main>
+      </header>
+      <Outlet />
     </div>
   )
 }
