@@ -8,7 +8,7 @@ blocking auto-approval, and rules reviewers keep confirming get stronger.
 
 from dataclasses import dataclass
 
-from sqlalchemy import func, select
+from sqlalchemy import case, func, select
 from sqlalchemy.orm import Session
 
 from app.models import Flag, ReviewAction, ReviewActionRecord
@@ -42,8 +42,7 @@ def rule_stats(db: Session) -> dict[str, RuleStats]:
     rows = db.execute(
         select(
             Flag.rule_id,
-            func.sum(func.iif(ReviewActionRecord.action == ReviewAction.reject.value, 1, 0)) if db.bind.dialect.name == "sqlite"
-            else func.sum(func.if_(ReviewActionRecord.action == ReviewAction.reject.value, 1, 0)),
+            func.sum(case((ReviewActionRecord.action == ReviewAction.reject, 1), else_=0)),
             func.count(ReviewActionRecord.id),
         )
         .join(ReviewActionRecord, ReviewActionRecord.flag_id == Flag.id)
