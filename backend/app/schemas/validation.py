@@ -81,7 +81,7 @@ class ReviewCompleteIn(BaseModel):
     )
 
 
-class ReviewQueueItem(BaseModel):
+class ReviewQueueItem(ORMModel):
     document_id: int
     original_filename: str
     owner_id: int

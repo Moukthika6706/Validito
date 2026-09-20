@@ -51,8 +51,12 @@ def render(template: str, **kwargs: Any) -> str:
 
 
 def _fmt(v: Any) -> Any:
+    if isinstance(v, bool):
+        return v
+    if isinstance(v, (int, float)) and abs(v) >= 1000:
+        return f"{v:,.2f}".rstrip("0").rstrip(".")
     if isinstance(v, float):
-        return f"{v:,.2f}".rstrip("0").rstrip(".") if abs(v) >= 1000 else round(v, 4)
+        return round(v, 4)
     return v
 
 

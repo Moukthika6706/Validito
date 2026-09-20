@@ -37,3 +37,5 @@ backend/app/ml/artifacts/
 .vscode/
 .DS_Store
 Thumbs.db
+*.db
+*.sqlite
