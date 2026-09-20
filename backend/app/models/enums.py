@@ -73,6 +73,7 @@ class FlagStatus(str, enum.Enum):
     accepted = "accepted"
     rejected = "rejected"
     overridden = "overridden"
+    superseded = "superseded"  # replaced by a newer validation run
 
 
 class ReviewAction(str, enum.Enum):
