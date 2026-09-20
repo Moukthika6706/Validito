@@ -1,0 +1,39 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+
+# Node
+node_modules/
+frontend/dist/
+frontend/.vite/
+npm-debug.log*
+
+# Env / secrets
+.env
+.env.*
+!.env.example
+
+# Runtime data
+backend/storage/
+backend/uploads/
+backend/app/ml/artifacts/
+*.pkl
+*.joblib
+*.log
+
+# EasyOCR / spaCy model caches
+.EasyOCR/
+*.pth
+
+# IDE / OS
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
