@@ -41,6 +41,12 @@ class DocumentView:
         items = self.of_type(entity_type)
         return max(items, key=lambda e: e.confidence) if items else None
 
+    def first_with(self, entity_type: str, path: str | None) -> EntityView | None:
+        """Highest-confidence entity of the type that has a value at `path` (a swap's
+        floating leg has no rate_pct, its fixed leg has no benchmark)."""
+        items = [e for e in self.of_type(entity_type) if e.get(path) is not None]
+        return max(items, key=lambda e: e.confidence) if items else None
+
     @property
     def quality(self) -> float:
         """Extraction quality factor used to temper flag confidence: OCR'd documents are

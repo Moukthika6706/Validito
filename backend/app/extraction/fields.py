@@ -87,6 +87,7 @@ FIELD_SPECS: tuple[FieldSpec, ...] = (
             r"coupon", r"rate\s+of\s+interest", r"all-?in\s+rate", r"reference\s+rate", r"benchmark",
         ),
         n.parse_rate,
+        multi=True,  # a swap has a fixed leg and a floating leg
         description="Interest rate / coupon",
     ),
     FieldSpec(

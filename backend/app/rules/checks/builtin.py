@@ -171,8 +171,8 @@ def distinct_values(rule: Rule, ctx: RuleContext) -> list[Finding]:
 def consistency(rule: Rule, ctx: RuleContext) -> list[Finding]:
     """Value at field/path must equal value at `params.other_field`/`params.other_path`."""
     f = _field(rule)
-    a = ctx.document.first(f)
-    b = ctx.document.first(rule.params["other_field"])
+    a = ctx.document.first_with(f, rule.params.get("path"))
+    b = ctx.document.first_with(rule.params["other_field"], rule.params.get("other_path"))
     if not a or not b:
         return []
     va, vb = a.get(rule.params.get("path")), b.get(rule.params.get("other_path"))
@@ -211,7 +211,8 @@ def text_contains(rule: Rule, ctx: RuleContext) -> list[Finding]:
 def _cross_pair(rule: Rule, ctx: RuleContext):
     if ctx.related is None:
         return None, None
-    return ctx.document.first(_field(rule)), ctx.related.first(_field(rule))
+    path = rule.params.get("path")
+    return ctx.document.first_with(_field(rule), path), ctx.related.first_with(_field(rule), path)
 
 
 @check("cross_doc_equal")
