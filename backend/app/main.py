@@ -1,3 +1,4 @@
+import logging
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
@@ -22,7 +23,20 @@ async def lifespan(app: FastAPI):
     configure_logging()
     settings = get_settings()
     settings.storage_dir.mkdir(parents=True, exist_ok=True)
+    _seed_rule_packs()
     yield
+
+
+def _seed_rule_packs() -> None:
+    """Make the bundled ISDA / LMA packs available on first boot (idempotent)."""
+    from app.core.db import session_scope
+    from app.rules import seed_rule_packs
+
+    try:
+        with session_scope() as db:
+            seed_rule_packs(db)
+    except Exception:  # noqa: BLE001 -- e.g. migrations not applied yet; /health will say so
+        logging.getLogger(__name__).exception("Could not seed rule packs at startup")
 
 
 def create_app() -> FastAPI:

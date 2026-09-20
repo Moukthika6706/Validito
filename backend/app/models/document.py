@@ -39,6 +39,8 @@ class Document(TimestampMixin, Base):
     page_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
     ocr_used: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # Final human verdict once a reviewer completes the document (approved / rejected).
+    review_outcome: Mapped[str | None] = mapped_column(String(16), nullable=True)
 
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False
