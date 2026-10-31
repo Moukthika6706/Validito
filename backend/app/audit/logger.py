@@ -15,7 +15,7 @@ import json
 from datetime import datetime, timezone
 from typing import Any
 
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -71,9 +71,18 @@ def _locked_head(db: Session) -> AuditChainHead:
     The head is created lazily on first use; a concurrent first-time creation loses the
     primary-key race and simply re-reads.
     """
-    head = db.execute(select(AuditChainHead).where(AuditChainHead.id == HEAD_ID).with_for_update()).scalar_one_or_none()
-    if head is not None:
-        return head
+    # Take the write lock *before* reading. A plain SELECT ... FOR UPDATE is enough on
+    # InnoDB, but SQLite ignores FOR UPDATE and only serialises at the first write: two
+    # sessions could both read the head under shared locks and the second would append a
+    # stale predecessor once the first commits. A no-op UPDATE acquires SQLite's RESERVED
+    # lock (and InnoDB's row X-lock) up front, so every recorder queues here.
+    locked = db.execute(
+        update(AuditChainHead).where(AuditChainHead.id == HEAD_ID).values(last_entry_id=AuditChainHead.last_entry_id)
+    )
+    if locked.rowcount:
+        return db.execute(
+            select(AuditChainHead).where(AuditChainHead.id == HEAD_ID).with_for_update().execution_options(populate_existing=True)
+        ).scalar_one()
     # Bootstrap: derive the head from whatever is already in the log (pre-head installs).
     last = db.execute(select(AuditLog).order_by(AuditLog.id.desc()).limit(1)).scalar_one_or_none()
     head = AuditChainHead(id=HEAD_ID, last_hash=last.hash if last else None, last_entry_id=last.id if last else None)
@@ -82,8 +91,11 @@ def _locked_head(db: Session) -> AuditChainHead:
             db.add(head)
             db.flush()
     except IntegrityError:
-        pass  # someone else created it between our select and insert
-    return db.execute(select(AuditChainHead).where(AuditChainHead.id == HEAD_ID).with_for_update()).scalar_one()
+        pass  # someone else created it between our update and insert
+    db.execute(update(AuditChainHead).where(AuditChainHead.id == HEAD_ID).values(last_entry_id=AuditChainHead.last_entry_id))
+    return db.execute(
+        select(AuditChainHead).where(AuditChainHead.id == HEAD_ID).with_for_update().execution_options(populate_existing=True)
+    ).scalar_one()
 
 
 def record(
