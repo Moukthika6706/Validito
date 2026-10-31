@@ -28,6 +28,7 @@ export const documents = {
   reprocess: (id) => api.post(`${V1}/documents/${id}/reprocess`),
   status: (ids) => api.get(`${V1}/documents/status`, { ids: ids.join(',') }),
   pages: (id) => api.get(`${V1}/documents/${id}/pages`),
+  reportUrl: (id) => `${V1}/documents/${id}/report.pdf`,
   bulkUpload: ({ files, doc_type, rule_pack_key }) => {
     const form = new FormData()
     files.forEach((f) => form.append('files', f))

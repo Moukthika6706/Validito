@@ -7,6 +7,7 @@ import GlowBackground from '../components/GlowBackground'
 import PageViewer from '../components/PageViewer'
 import { EmptyState, ErrorState, Field, Loading, Notice } from '../components/States'
 import { StatusPill } from '../components/StatusPill'
+import { tokenStore } from '../api/client'
 import { useAuth } from '../context/AuthContext'
 import { useAsync } from '../hooks/useAsync'
 import { fmtNormalized, humanize } from '../utils/format'
@@ -115,6 +116,7 @@ export default function ReviewDocument() {
           </span>
         </div>
         <div className="row" style={{ gap: 8 }}>
+          {!inFlight && <ReportButton document={d} onError={(m) => setNotice({ tone: 'bad', text: m })} />}
           {!inFlight && (
             <Button variant="ghost" size="sm" onClick={() => act(() => documents.revalidate(d.id), 'Re-validation queued.', setNotice, doc)}>
               Re-validate
@@ -241,6 +243,33 @@ async function act(fn, msg, setNotice, doc) {
   } catch (e) {
     setNotice({ tone: 'bad', text: e.detail || e.message })
   }
+}
+
+function ReportButton({ document: d, onError }) {
+  const [busy, setBusy] = useState(false)
+  const download = async () => {
+    setBusy(true)
+    try {
+      const res = await fetch(`${import.meta.env.VITE_API_URL || ''}${documents.reportUrl(d.id)}`, { headers: { Authorization: `Bearer ${tokenStore.get()}` } })
+      if (!res.ok) throw new Error(`Report failed (${res.status})`)
+      const blob = await res.blob()
+      const url = URL.createObjectURL(blob)
+      const a = Object.assign(document.createElement('a'), { href: url, download: `validito-report-${d.id}.pdf` })
+      document.body.appendChild(a)
+      a.click()
+      a.remove()
+      setTimeout(() => URL.revokeObjectURL(url), 10_000)
+    } catch (e) {
+      onError(e.message)
+    } finally {
+      setBusy(false)
+    }
+  }
+  return (
+    <Button variant="secondary" size="sm" loading={busy} onClick={download} title="PDF with fields, flags, reviewer actions and the audit trail">
+      Download report
+    </Button>
+  )
 }
 
 function ProcessingState({ status }) {

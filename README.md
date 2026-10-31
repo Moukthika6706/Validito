@@ -122,7 +122,13 @@ cd backend && python -m pytest -q      # 83 tests: normalisers, extraction, rule
    back: a rule reviewers keep rejecting loses confidence and drifts into the "ask a human"
    band instead of blocking approvals.
 
-7. **Audit.** Every extraction, flag, routing decision, rule-pack edit and reviewer action is
+7. **Export.** `GET /documents/{id}/report.pdf` (or the *Download report* button) produces a PDF
+   with the metadata, every extracted field, the routing decision, each flag with its explanation,
+   evidence, rule-pack version and confidence, reviewer actions with comments, and the document's
+   audit events with their hashes plus a re-verification of that slice of the chain. Generating a
+   report is itself audited.
+
+8. **Audit.** Every extraction, flag, routing decision, rule-pack edit and reviewer action is
    an append-only row whose hash covers the previous row. `GET /api/v1/audit?document_id=X`
    answers "show me every decision on document X"; `GET /api/v1/audit/verify` proves nothing
    was altered.
@@ -190,7 +196,7 @@ Full interactive docs at `/docs`.
 | Area | Endpoints |
 |---|---|
 | Auth | `POST /auth/register`, `POST /auth/login`, `GET /auth/me` |
-| Documents | `POST /documents` (upload, 202), `POST /documents/bulk` (many files, per-file accept/reject), `GET /documents/status?ids=` (poll-friendly), `GET /documents`, `GET /documents/{id}`, `/text`, `/entities` (with `bbox` provenance), `/file`, `/pages`, `/pages/{n}.png` (rendered page for the overlay), `/flags`, `/runs`, `POST /{id}/reprocess`, `POST /{id}/validate`, `PUT /{id}/link` |
+| Documents | `POST /documents` (upload, 202), `POST /documents/bulk` (many files, per-file accept/reject), `GET /documents/status?ids=` (poll-friendly), `GET /documents`, `GET /documents/{id}`, `/text`, `/entities` (with `bbox` provenance), `/file`, `/pages`, `/pages/{n}.png` (rendered page for the overlay), `/report.pdf` (full validation report), `/flags`, `/runs`, `POST /{id}/reprocess`, `POST /{id}/validate`, `PUT /{id}/link` |
 | Validation | `GET /validation/runs/{id}`, `GET /flags/{id}` |
 | Review (reviewer+) | `GET /review/queue`, `POST`/`DELETE /review/documents/{id}/claim` (soft lock, `409` if held by someone else), `POST /review/flags/{id}/actions`, `POST /review/documents/{id}/complete` |
 | Audit | `GET /audit`, `GET /audit/documents/{id}`, `GET /audit/event-types`, `GET /audit/verify` (admin) |

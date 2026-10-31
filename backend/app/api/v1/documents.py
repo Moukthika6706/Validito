@@ -10,7 +10,7 @@ from app.api.deps import DB, CurrentUser
 from app.models import DocumentStatus, DocumentType, User
 from app.schemas.common import Page
 from app.schemas.document import BulkUploadResult, DocumentDetail, DocumentLink, DocumentOut, DocumentStatusOut, DocumentTextOut, EntityOut, PagesOut
-from app.services import render_service
+from app.services import render_service, report_service
 from app.audit import events, record
 from app.services import document_service as svc
 
@@ -129,6 +129,22 @@ def page_png(document_id: int, number: int, dpi: int = Query(render_service.DEFA
                actor_id=user.id, payload={"dpi": dpi, "source": render_service.render_source(document)[0]})
         db.commit()
     return Response(content=png, media_type="image/png", headers={"Cache-Control": "private, max-age=300"})
+
+
+@router.get(
+    "/{document_id}/report.pdf",
+    summary="Download the full validation report as PDF",
+    responses={200: {"content": {"application/pdf": {}}}},
+)
+def report_pdf(document_id: int, user: User = CurrentUser, db: Session = DB):
+    document = svc.get_document_or_404(db, document_id, user)
+    pdf = report_service.build_report(db, document, generated_by=user)
+    record(db, event_type=events.REPORT_GENERATED, target_type="document", target_id=document.id, document_id=document.id,
+           actor_id=user.id, payload={"bytes": len(pdf), "status_at_generation": document.status.value})
+    db.commit()
+    safe = "".join(ch if ch.isalnum() or ch in "-_." else "_" for ch in document.original_filename.rsplit(".", 1)[0])
+    return Response(content=pdf, media_type="application/pdf",
+                    headers={"Content-Disposition": f'attachment; filename="validito-report-{document.id}-{safe}.pdf"'})
 
 
 @router.post("/{document_id}/reprocess", response_model=DocumentOut, status_code=202, summary="Re-run extraction + validation")

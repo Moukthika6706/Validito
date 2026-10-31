@@ -33,6 +33,9 @@ pandas>=2.2
 numpy>=1.26
 joblib>=1.4
 
+# --- Reports ---
+reportlab>=4.0
+
 # --- Config ---
 pyyaml>=6.0
 
