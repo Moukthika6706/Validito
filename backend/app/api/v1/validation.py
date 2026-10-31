@@ -15,7 +15,7 @@ router = APIRouter(tags=["validation"])
 @router.post("/documents/{document_id}/validate", response_model=DocumentOut, status_code=202, summary="Re-run rules, ML and routing on the extracted entities")
 def revalidate(document_id: int, user: User = CurrentUser, db: Session = DB):
     document = document_service.get_document_or_404(db, document_id, user)
-    if document.status in (DocumentStatus.uploaded, DocumentStatus.processing):
+    if document.status in (DocumentStatus.queued, DocumentStatus.extracting):
         from fastapi import HTTPException
         raise HTTPException(409, "Document has not finished extraction yet.")
     from app.workers.tasks import enqueue_validation

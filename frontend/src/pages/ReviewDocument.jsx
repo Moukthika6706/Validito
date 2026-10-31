@@ -10,9 +10,9 @@ import { useAuth } from '../context/AuthContext'
 import { useAsync } from '../hooks/useAsync'
 import { fmtNormalized, humanize } from '../utils/format'
 
-const IN_FLIGHT = new Set(['uploaded', 'processing', 'extracted', 'validated'])
+const IN_FLIGHT = new Set(['queued', 'extracting', 'extracted', 'validating'])
 const SEV_RANK = { critical: 3, error: 2, warning: 1, info: 0 }
-const PIPELINE = ['uploaded', 'processing', 'extracted', 'validated', 'decided']
+const PIPELINE = ['queued', 'extracting', 'extracted', 'validating', 'decided']
 
 export default function ReviewDocument() {
   const { id } = useParams()
@@ -136,7 +136,7 @@ export default function ReviewDocument() {
               <p className="micro muted" style={{ marginBottom: 12 }}>You hold the review lock on this document; other reviewers see it as claimed.</p>
             )}
             {inFlight && <ProcessingState status={d.status} />}
-            {d.status === 'failed' && <Notice tone="bad">Processing failed: {d.error_message || 'unknown error'}. Fix the file or re-process.</Notice>}
+            {d.status === 'failed' && <Notice tone="bad">Processing failed during {d.failed_stage || 'processing'} after {d.attempts} attempt{d.attempts === 1 ? '' : 's'}: {d.error_message || 'unknown error'}. Fix the file or re-process.</Notice>}
             {d.status === 'auto_approved' && (
               <Notice tone="ok">Auto-approved — every rule passed with high confidence{resolved.length + open.length ? ` (${resolved.length + open.length} informational note${resolved.length + open.length === 1 ? '' : 's'})` : ''}.</Notice>
             )}
@@ -218,7 +218,7 @@ function ProcessingState({ status }) {
     <div className="card">
       <div className="row">
         <span className="spinner" />
-        <strong>{status === 'uploaded' ? 'Queued for processing' : 'Processing'}</strong>
+        <strong>{status === 'queued' ? 'Queued for processing' : `${status[0].toUpperCase()}${status.slice(1)}…`}</strong>
       </div>
       <div className="timeline">
         {PIPELINE.map((s, i) => (

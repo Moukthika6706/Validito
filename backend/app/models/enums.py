@@ -16,14 +16,29 @@ class DocumentType(str, enum.Enum):
 
 
 class DocumentStatus(str, enum.Enum):
-    uploaded = "uploaded"
-    processing = "processing"
-    extracted = "extracted"
-    validated = "validated"
+    """queued -> extracting -> extracted -> validating -> auto_approved | needs_review -> reviewed,
+    with `failed` reachable from either processing stage (see documents.failed_stage)."""
+
+    queued = "queued"
+    extracting = "extracting"
+    extracted = "extracted"  # extraction done, waiting for the validation task
+    validating = "validating"
     auto_approved = "auto_approved"
     needs_review = "needs_review"
     reviewed = "reviewed"
     failed = "failed"
+
+    @property
+    def is_terminal(self) -> bool:
+        return self in TERMINAL_STATUSES
+
+    @property
+    def in_flight(self) -> bool:
+        return self in IN_FLIGHT_STATUSES
+
+
+TERMINAL_STATUSES = frozenset({DocumentStatus.auto_approved, DocumentStatus.needs_review, DocumentStatus.reviewed, DocumentStatus.failed})
+IN_FLIGHT_STATUSES = frozenset({DocumentStatus.queued, DocumentStatus.extracting, DocumentStatus.extracted, DocumentStatus.validating})
 
 
 class Extractor(str, enum.Enum):

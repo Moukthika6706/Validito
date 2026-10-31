@@ -33,7 +33,7 @@ def pdf_bytes(lines: list[str]) -> bytes:
     return data
 
 
-SHEET = [
+PDF_SHEET_LINES = SHEET = [
     "Trade Date: 15 March 2026",
     "Termination Date: 17 March 2031",
     "Notional Amount: USD 50,000,000",

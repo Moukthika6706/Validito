@@ -26,7 +26,7 @@ class Document(TimestampMixin, Base):
     )
     rule_pack_key: Mapped[str | None] = mapped_column(String(32), nullable=True)
     status: Mapped[DocumentStatus] = mapped_column(
-        str_enum(DocumentStatus), default=DocumentStatus.uploaded, index=True, nullable=False
+        str_enum(DocumentStatus), default=DocumentStatus.queued, index=True, nullable=False
     )
     # Term sheet <-> confirmation pairing for cross-document checks.
     related_document_id: Mapped[int | None] = mapped_column(
@@ -39,6 +39,9 @@ class Document(TimestampMixin, Base):
     page_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
     ocr_used: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # Which pipeline stage failed (extracting | validating) and how many task attempts ran.
+    failed_stage: Mapped[str | None] = mapped_column(String(16), nullable=True)
+    attempts: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     # Final human verdict once a reviewer completes the document (approved / rejected).
     review_outcome: Mapped[str | None] = mapped_column(String(16), nullable=True)
     # Review lock: who is working the document and since when (expires after

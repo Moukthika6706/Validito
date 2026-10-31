@@ -34,6 +34,8 @@ class DocumentOut(ORMModel):
     ocr_used: bool
     error_message: str | None
     review_outcome: str | None = None
+    failed_stage: str | None = None
+    attempts: int = 0
     claimed_by_id: int | None = None
     claimed_by_name: str | None = None
     claimed_at: datetime | None = None
@@ -54,6 +56,32 @@ class DocumentTextOut(BaseModel):
     raw_text: str | None
     page_count: int | None
     ocr_used: bool
+
+
+class DocumentStatusOut(ORMModel):
+    id: int
+    status: DocumentStatus
+    terminal: bool
+    failed_stage: str | None
+    error_message: str | None
+    attempts: int
+    routing_decision: str | None
+    review_outcome: str | None
+    updated_at: datetime
+
+
+class BulkFileResult(BaseModel):
+    filename: str
+    accepted: bool
+    document_id: int | None
+    status: str | None
+    reason: str | None
+
+
+class BulkUploadResult(BaseModel):
+    accepted: int
+    rejected: int
+    results: list[BulkFileResult]
 
 
 class DocumentLink(BaseModel):

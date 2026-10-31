@@ -88,12 +88,12 @@ def ml_finding(pack: RulePackConfig, view: DocumentView) -> Finding | None:
     )
 
 
-def run_validation(db: Session, document: Document) -> ValidationOutcome:
+def run_validation(db: Session, document: Document, *, mark_failed: bool = True) -> ValidationOutcome:
     db.refresh(document)  # drop any stale relationship collections from the extraction stage
-    if document.status in (DocumentStatus.uploaded, DocumentStatus.processing) and not document.entities and not document.raw_text:
+    if document.status in (DocumentStatus.queued, DocumentStatus.extracting) and not document.entities and not document.raw_text:
         raise RuntimeError(f"Document {document.id} has not been extracted yet")
 
-    set_status(db, document, DocumentStatus.processing, stage="validation")
+    set_status(db, document, DocumentStatus.validating, stage="validation", attempt=document.attempts)
     pack, pack_row_id = resolve_pack(db, document)
     run = ValidationRun(document_id=document.id, rule_pack_id=pack_row_id, ml_model_version=MODEL_VERSION, status=RunStatus.running)
     db.add(run)
@@ -113,7 +113,9 @@ def run_validation(db: Session, document: Document) -> ValidationOutcome:
         run.completed_at = utcnow()
         document.error_message = f"{type(exc).__name__}: {exc}"[:2000]
         record(db, event_type=events.VALIDATION_FAILED, target_type="validation_run", target_id=run.id, document_id=document.id, payload={"error": document.error_message})
-        set_status(db, document, DocumentStatus.failed, stage="validation")
+        if mark_failed:
+            document.failed_stage = DocumentStatus.validating.value
+            set_status(db, document, DocumentStatus.failed, stage="validation")
         db.commit()
         raise
     return outcome

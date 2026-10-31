@@ -26,6 +26,14 @@ export const documents = {
     return api.postForm(`${V1}/documents`, form)
   },
   reprocess: (id) => api.post(`${V1}/documents/${id}/reprocess`),
+  status: (ids) => api.get(`${V1}/documents/status`, { ids: ids.join(',') }),
+  bulkUpload: ({ files, doc_type, rule_pack_key }) => {
+    const form = new FormData()
+    files.forEach((f) => form.append('files', f))
+    form.append('doc_type', doc_type)
+    if (rule_pack_key) form.append('rule_pack_key', rule_pack_key)
+    return api.postForm(`${V1}/documents/bulk`, form)
+  },
   revalidate: (id) => api.post(`${V1}/documents/${id}/validate`),
   link: (id, related_document_id) => api.put(`${V1}/documents/${id}/link`, { related_document_id }),
 }

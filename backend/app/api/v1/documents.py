@@ -9,7 +9,7 @@ from app.ingestion.storage import absolute_path
 from app.api.deps import DB, CurrentUser
 from app.models import DocumentStatus, DocumentType, User
 from app.schemas.common import Page
-from app.schemas.document import DocumentDetail, DocumentLink, DocumentOut, DocumentTextOut, EntityOut
+from app.schemas.document import BulkUploadResult, DocumentDetail, DocumentLink, DocumentOut, DocumentStatusOut, DocumentTextOut, EntityOut
 from app.services import document_service as svc
 
 router = APIRouter(prefix="/documents", tags=["documents"])
@@ -39,6 +39,35 @@ async def upload_document(
         rule_pack_key=rule_pack_key or None,
         related_document_id=related_document_id,
     )
+
+
+@router.post(
+    "/bulk",
+    response_model=BulkUploadResult,
+    status_code=202,
+    summary="Upload several files at once; each is accepted or rejected independently",
+)
+async def bulk_upload(
+    files: Annotated[list[UploadFile], File()],
+    doc_type: Annotated[DocumentType, Form()] = DocumentType.term_sheet,
+    rule_pack_key: Annotated[str | None, Form(max_length=32, pattern=r"^[a-z0-9_\-]*$")] = None,
+    user: User = CurrentUser,
+    db: Session = DB,
+):
+    payload = [(f.filename or "upload", await f.read()) for f in files]
+    results = svc.create_documents_bulk(db, owner=user, files=payload, doc_type=doc_type, rule_pack_key=rule_pack_key or None)
+    accepted = sum(1 for r in results if r["accepted"])
+    return BulkUploadResult(accepted=accepted, rejected=len(results) - accepted, results=results)
+
+
+@router.get("/status", response_model=list[DocumentStatusOut], summary="Poll-friendly status for a set of document ids")
+def status_snapshot(
+    ids: str = Query(..., description="Comma-separated document ids, max 200"),
+    user: User = CurrentUser,
+    db: Session = DB,
+):
+    parsed = [int(x) for x in ids.split(",") if x.strip().isdigit()]
+    return svc.status_snapshot(db, user, parsed)
 
 
 @router.get("", response_model=Page[DocumentOut], summary="List documents visible to the caller")

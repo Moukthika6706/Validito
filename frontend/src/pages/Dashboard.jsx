@@ -9,7 +9,7 @@ import { useAuth } from '../context/AuthContext'
 import { useAsync } from '../hooks/useAsync'
 import { fmtRelative } from '../utils/format'
 
-const IN_FLIGHT = new Set(['uploaded', 'processing', 'extracted', 'validated'])
+const IN_FLIGHT = new Set(['queued', 'extracting', 'extracted', 'validating'])
 
 export default function Dashboard() {
   const { user, isReviewer } = useAuth()
@@ -170,7 +170,7 @@ function HowItWorks({ onUpload }) {
                 <div style={{ fontWeight: 600 }}>lma_term_loan.docx</div>
                 <div className="micro muted">running rule pack LMA</div>
               </div>
-              <StatusPill status="processing" />
+              <StatusPill status="validating" />
             </div>
           </div>
         </div>

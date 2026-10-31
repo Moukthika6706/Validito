@@ -13,7 +13,7 @@ from app.models import Document, DocumentStatus, DocumentType, Flag, FlagStatus,
 log = logging.getLogger(__name__)
 
 REPROCESSABLE = {
-    DocumentStatus.uploaded, DocumentStatus.extracted, DocumentStatus.validated,
+    DocumentStatus.queued, DocumentStatus.extracted,
     DocumentStatus.auto_approved, DocumentStatus.needs_review, DocumentStatus.reviewed,
     DocumentStatus.failed,
 }
@@ -49,7 +49,7 @@ def create_document(
         doc_type=doc_type,
         rule_pack_key=rule_pack_key,
         related_document_id=related_document_id,
-        status=DocumentStatus.uploaded,
+        status=DocumentStatus.queued,
     )
     db.add(document)
     db.flush()
@@ -85,13 +85,64 @@ def reprocess_document(db: Session, document: Document, actor: User) -> Document
     record(
         db, event_type=events.DOCUMENT_STATUS_CHANGED, target_type="document", target_id=document.id,
         document_id=document.id, actor_id=actor.id,
-        payload={"from": document.status.value, "to": DocumentStatus.uploaded.value, "reason": "reprocess"},
+        payload={"from": document.status.value, "to": DocumentStatus.queued.value, "reason": "reprocess", "previous_failed_stage": document.failed_stage},
     )
-    document.status = DocumentStatus.uploaded
+    document.status = DocumentStatus.queued
     document.error_message = None
+    document.failed_stage = None
+    document.attempts = 0
     db.commit()
     _dispatch(document.id)
     return document
+
+
+def create_documents_bulk(
+    db: Session, *, owner: User, files: list[tuple[str, bytes]], doc_type: DocumentType, rule_pack_key: str | None
+) -> list[dict]:
+    """Each file is validated, stored and queued independently; one bad file never rejects the batch."""
+    results: list[dict] = []
+    for filename, content in files:
+        try:
+            doc = create_document(db, owner=owner, filename=filename, content=content, doc_type=doc_type, rule_pack_key=rule_pack_key)
+            results.append({"filename": filename, "accepted": True, "document_id": doc.id, "status": doc.status.value, "reason": None})
+        except HTTPException as exc:
+            db.rollback()
+            results.append({"filename": filename, "accepted": False, "document_id": None, "status": None, "reason": str(exc.detail)})
+    accepted = [r for r in results if r["accepted"]]
+    record(
+        db, event_type=events.DOCUMENT_BULK_UPLOADED, target_type="user", target_id=owner.id, actor_id=owner.id,
+        payload={"accepted": len(accepted), "rejected": len(results) - len(accepted), "document_ids": [r["document_id"] for r in accepted],
+                 "rejected_files": [{"filename": r["filename"], "reason": r["reason"]} for r in results if not r["accepted"]]},
+    )
+    db.commit()
+    return results
+
+
+def status_snapshot(db: Session, user: User, ids: list[int]) -> list[dict]:
+    """Lightweight, poll-friendly status for a set of documents (no entity / flag joins)."""
+    if not ids:
+        return []
+    q = select(Document).where(Document.id.in_(ids[:200]))
+    if user.role == UserRole.analyst:
+        q = q.where(Document.owner_id == user.id)
+    docs = {d.id: d for d in db.execute(q).scalars()}
+    runs = {}
+    if docs:
+        for run in db.execute(select(ValidationRun).where(ValidationRun.document_id.in_(list(docs))).order_by(ValidationRun.id)).scalars():
+            runs[run.document_id] = run
+    out = []
+    for doc_id in ids:
+        d = docs.get(doc_id)
+        if d is None:
+            continue  # unknown or not visible: silently omitted, same as a 404 elsewhere
+        run = runs.get(d.id)
+        out.append({
+            "id": d.id, "status": d.status, "terminal": d.status.is_terminal, "failed_stage": d.failed_stage,
+            "error_message": d.error_message if d.status == DocumentStatus.failed else None, "attempts": d.attempts,
+            "routing_decision": run.routing_decision.value if run and run.routing_decision else None,
+            "review_outcome": d.review_outcome, "updated_at": d.updated_at,
+        })
+    return out
 
 
 def get_document_or_404(db: Session, document_id: int, user: User) -> Document:
@@ -142,6 +193,8 @@ def document_detail(db: Session, document: Document) -> dict:
     return {
         **{c: getattr(document, c) for c in Document.__table__.columns.keys()},
         "entities": sorted(document.entities, key=lambda e: (e.entity_type, -e.confidence)),
+        "claimed_by_name": document.claimed_by_name,
+        "claim_expires_at": document.claim_expires_at,
         "open_flag_count": open_flags,
         "latest_run_id": latest_run.id if latest_run else None,
         "routing_decision": latest_run.routing_decision.value if latest_run and latest_run.routing_decision else None,

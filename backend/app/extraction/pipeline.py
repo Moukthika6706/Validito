@@ -27,9 +27,13 @@ def set_status(db: Session, document: Document, status: DocumentStatus, *, actor
     )
 
 
-def run_extraction(db: Session, document: Document) -> list[ExtractedEntity]:
-    """Extract text + entities for one document. Raises on failure after recording it."""
-    set_status(db, document, DocumentStatus.processing, stage="extraction")
+def run_extraction(db: Session, document: Document, *, mark_failed: bool = True) -> list[ExtractedEntity]:
+    """Extract text + entities for one document. Raises on failure after recording it.
+
+    `mark_failed=False` lets the Celery task decide (it may retry) whether the document
+    ends up in `failed`; direct callers get the terminal transition here.
+    """
+    set_status(db, document, DocumentStatus.extracting, stage="extraction", attempt=document.attempts)
     db.commit()
 
     try:
@@ -46,7 +50,9 @@ def run_extraction(db: Session, document: Document) -> list[ExtractedEntity]:
             document_id=document.id,
             payload={"error": document.error_message},
         )
-        set_status(db, document, DocumentStatus.failed, stage="extraction")
+        if mark_failed:
+            document.failed_stage = DocumentStatus.extracting.value
+            set_status(db, document, DocumentStatus.failed, stage="extraction")
         db.commit()
         raise
 

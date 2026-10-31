@@ -1,6 +1,8 @@
 """Canonical audit event names. Keep these stable: they are queried by compliance views."""
 
 DOCUMENT_UPLOADED = "document.uploaded"
+DOCUMENT_BULK_UPLOADED = "document.bulk_uploaded"
+DOCUMENT_RETRY_SCHEDULED = "document.retry_scheduled"
 DOCUMENT_STATUS_CHANGED = "document.status_changed"
 DOCUMENT_LINKED = "document.linked"
 EXTRACTION_COMPLETED = "extraction.completed"

@@ -1,10 +1,10 @@
 import { humanize } from '../utils/format'
 
 const DOC_TONE = {
-  uploaded: 'neutral',
-  processing: 'neutral',
+  queued: 'neutral',
+  extracting: 'neutral',
   extracted: 'neutral',
-  validated: 'neutral',
+  validating: 'neutral',
   auto_approved: 'ok',
   needs_review: 'warn',
   reviewed: 'info',
@@ -13,7 +13,7 @@ const DOC_TONE = {
 const SEV_TONE = { info: 'neutral', warning: 'warn', error: 'bad', critical: 'crit' }
 const FLAG_TONE = { open: 'warn', accepted: 'bad', rejected: 'ok', overridden: 'info', superseded: 'neutral' }
 const FLAG_LABEL = { accepted: 'Confirmed', rejected: 'False positive', overridden: 'Overridden' }
-const PROCESSING = new Set(['uploaded', 'processing', 'extracted', 'validated'])
+const PROCESSING = new Set(['queued', 'extracting', 'extracted', 'validating'])
 
 export function StatusPill({ status, outcome }) {
   let tone = DOC_TONE[status] || 'neutral'
@@ -22,7 +22,7 @@ export function StatusPill({ status, outcome }) {
     tone = outcome === 'approved' ? 'ok' : 'bad'
     label = `Reviewed · ${outcome}`
   }
-  if (PROCESSING.has(status)) label = status === 'uploaded' ? 'Queued' : 'Processing'
+  if (PROCESSING.has(status)) label = { queued: 'Queued', extracting: 'Extracting', extracted: 'Extracted', validating: 'Validating' }[status]
   return <span className={`pill pill-${tone} ${PROCESSING.has(status) ? 'pill-processing' : ''}`}>{label}</span>
 }
 

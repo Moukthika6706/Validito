@@ -83,9 +83,12 @@ cd backend && python -m pytest -q      # 83 tests: normalisers, extraction, rule
 
 ## How it works (pitch version)
 
-1. **Ingest.** Analysts upload a PDF, DOCX or scan. The API validates the file (MIME sniffing,
-   size, extension allow-list), stores it content-addressed, writes an audit event and returns
-   `202` immediately — processing runs on Celery workers that scale independently of the API.
+1. **Ingest.** Analysts upload a PDF, DOCX or scan — one at a time or as a batch. The API
+   validates each file (MIME sniffing, size, extension allow-list), stores it content-addressed,
+   writes an audit event and returns `202` immediately. Processing runs on Celery workers that
+   scale independently of the API, moving the document `queued → extracting → extracted →
+   validating → decision`, retrying transient failures with backoff and recording the failing
+   stage if they give up. The UI polls `GET /documents/status` until every file is terminal.
 
 2. **Extract.** PyMuPDF pulls the text layer; pages without one are rendered and passed
    through EasyOCR. A label-driven extractor reads the "Label: Value" structure of a term
@@ -186,9 +189,9 @@ Full interactive docs at `/docs`.
 | Area | Endpoints |
 |---|---|
 | Auth | `POST /auth/register`, `POST /auth/login`, `GET /auth/me` |
-| Documents | `POST /documents` (upload, 202), `GET /documents`, `GET /documents/{id}`, `/text`, `/entities`, `/flags`, `/runs`, `POST /{id}/reprocess`, `POST /{id}/validate`, `PUT /{id}/link` |
+| Documents | `POST /documents` (upload, 202), `POST /documents/bulk` (many files, per-file accept/reject), `GET /documents/status?ids=` (poll-friendly), `GET /documents`, `GET /documents/{id}`, `/text`, `/entities`, `/file`, `/flags`, `/runs`, `POST /{id}/reprocess`, `POST /{id}/validate`, `PUT /{id}/link` |
 | Validation | `GET /validation/runs/{id}`, `GET /flags/{id}` |
-| Review (reviewer+) | `GET /review/queue`, `POST /review/flags/{id}/actions`, `POST /review/documents/{id}/complete` |
+| Review (reviewer+) | `GET /review/queue`, `POST`/`DELETE /review/documents/{id}/claim` (soft lock, `409` if held by someone else), `POST /review/flags/{id}/actions`, `POST /review/documents/{id}/complete` |
 | Audit | `GET /audit`, `GET /audit/documents/{id}`, `GET /audit/event-types`, `GET /audit/verify` (admin) |
 | Rule packs | `GET /rule-packs`, `GET /rule-packs/{key}`, `GET /rule-packs/checks`; admin: `POST /rule-packs`, `PATCH /rule-packs/{key}/rules/{rule_id}`, `POST /rule-packs/versions/{id}/activate` |
 | Metrics | `GET /metrics/summary` — auto-approval %, manual review reduction, flag mix, top rules, daily series |

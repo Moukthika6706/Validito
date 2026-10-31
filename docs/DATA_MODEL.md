@@ -5,12 +5,13 @@ MySQL via SQLAlchemy 2.0; schema managed with Alembic.
 | Table | Purpose | Key columns |
 |---|---|---|
 | `users` | accounts + roles | `id, email (unique), password_hash, full_name, role {analyst, reviewer, admin}, is_active, created_at` |
-| `documents` | one row per upload | `id, owner_id→users, original_filename, storage_path, mime_type, size_bytes, sha256, doc_type {term_sheet, confirmation, other}, rule_pack_key, status, related_document_id→documents, raw_text, ocr_used, error_message, created_at, updated_at` |
+| `documents` | one row per upload | `id, owner_id→users, original_filename, storage_path, mime_type, size_bytes, sha256, doc_type {term_sheet, confirmation, other}, rule_pack_key, status, failed_stage {extracting, validating}, attempts, related_document_id→documents, raw_text, ocr_used, error_message, review_outcome, claimed_by_id→users, claimed_at, created_at, updated_at` |
 | `extracted_entities` | NER / regex output | `id, document_id, entity_type, raw_text, normalized_value (JSON), confidence, extractor {spacy_ner, entity_ruler, regex}, page, char_start, char_end` |
 | `rule_packs` | versioned ISDA / LMA configs | `id, key, name, version, description, config (JSON), is_active, created_by, created_at` — `(key, version)` unique |
 | `validation_runs` | one pipeline execution | `id, document_id, rule_pack_id, ml_model_version, status, overall_score, routing_decision {auto_approved, needs_review}, routing_reason, started_at, completed_at` |
 | `flags` | explainable findings | `id, validation_run_id, document_id, entity_id (nullable), source {rule, ml, cross_doc}, rule_id, rule_snapshot (JSON), severity {info, warning, error, critical}, confidence, title, explanation, evidence (JSON), status {open, accepted, rejected, overridden}` |
 | `review_actions` | human decisions | `id, flag_id, reviewer_id, action {accept, reject, override}, comment, override_value (JSON), created_at` |
+| `audit_chain_head` | single row (id=1) holding the newest audit hash; locked FOR UPDATE by every writer so concurrent recorders cannot fork the chain | `id, last_hash, last_entry_id` |
 | `audit_log` | append-only, hash-chained | `id, document_id (nullable), actor_id (nullable = system), event_type, target_type, target_id, payload (JSON), created_at, prev_hash, hash` |
 
 ## Explainability is first-class
@@ -26,9 +27,21 @@ Every `flags` row carries:
 ## Document lifecycle
 
 ```
-uploaded → processing → extracted → validated → auto_approved | needs_review → reviewed
-                └──────────────────── failed (from any processing state)
+queued → extracting → extracted → validating → auto_approved | needs_review → reviewed
+            └──────────────────────────┴──────→ failed  (failed_stage records which stage)
 ```
+
+`queued` is set on upload, `extracting` / `validating` by the Celery task that owns the stage,
+and `extracted` between the two tasks. A stage retries transient errors with exponential backoff
+(30s, 60s, 120s; max 3 retries) and only then marks the document `failed` with `failed_stage`,
+`error_message` and the `attempts` count. `POST /documents/{id}/reprocess` resets these and
+re-queues. Terminal statuses: `auto_approved`, `needs_review`, `reviewed`, `failed`.
+
+### Review claims
+
+`claimed_by_id` / `claimed_at` form a soft lock that expires after `REVIEW_CLAIM_TTL_MINUTES`
+(default 30). Reviewer writes auto-claim a free document and return `409` with the holder's name
+and expiry when another reviewer holds it; completing the review releases the claim.
 
 ## Routing
 
