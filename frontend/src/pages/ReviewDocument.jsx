@@ -113,6 +113,9 @@ export default function ReviewDocument() {
           <StatusPill status={d.status} outcome={d.review_outcome} />
           <span className="micro muted nowrap">
             {d.rule_pack_key ? d.rule_pack_key.toUpperCase() : 'auto'} · {open.length} open flag{open.length === 1 ? '' : 's'}
+            {d.amendment_of_id && (
+              <> · amends <Link to={`/review/${d.amendment_of_id}`}>#{d.amendment_of_id}</Link>{d.amended_fields?.length ? ` (declared: ${d.amended_fields.map((f) => f.replace(/_/g, ' ')).join(', ')})` : ' (no declared changes)'}</>
+            )}
           </span>
         </div>
         <div className="row" style={{ gap: 8 }}>

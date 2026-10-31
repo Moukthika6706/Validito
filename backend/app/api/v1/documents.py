@@ -9,7 +9,7 @@ from app.ingestion.storage import absolute_path
 from app.api.deps import DB, CurrentUser
 from app.models import DocumentStatus, DocumentType, User
 from app.schemas.common import Page
-from app.schemas.document import BulkUploadResult, DocumentDetail, DocumentLink, DocumentOut, DocumentStatusOut, DocumentTextOut, EntityOut, PagesOut
+from app.schemas.document import AmendmentLink, BulkUploadResult, DocumentDetail, DocumentLink, DocumentOut, DocumentStatusOut, DocumentTextOut, EntityOut, PagesOut
 from app.services import render_service, report_service
 from app.audit import events, record
 from app.services import document_service as svc
@@ -28,6 +28,8 @@ async def upload_document(
     doc_type: Annotated[DocumentType, Form()] = DocumentType.term_sheet,
     rule_pack_key: Annotated[str | None, Form(max_length=32, pattern=r"^[a-z0-9_\-]*$")] = None,
     related_document_id: Annotated[int | None, Form()] = None,
+    amendment_of_id: Annotated[int | None, Form()] = None,
+    amended_fields: Annotated[str | None, Form(max_length=1000, description="Comma-separated entity types declared as amended")] = None,
     user: User = CurrentUser,
     db: Session = DB,
 ):
@@ -40,6 +42,8 @@ async def upload_document(
         doc_type=doc_type,
         rule_pack_key=rule_pack_key or None,
         related_document_id=related_document_id,
+        amendment_of_id=amendment_of_id,
+        amended_fields=[f for f in (amended_fields or "").split(",") if f.strip()],
     )
 
 
@@ -151,6 +155,12 @@ def report_pdf(document_id: int, user: User = CurrentUser, db: Session = DB):
 def reprocess(document_id: int, user: User = CurrentUser, db: Session = DB):
     document = svc.get_document_or_404(db, document_id, user)
     return svc.reprocess_document(db, document, user)
+
+
+@router.put("/{document_id}/amendment", response_model=DocumentOut, summary="Mark this document as an amendment of another, declaring the changed fields")
+def set_amendment(document_id: int, body: AmendmentLink, user: User = CurrentUser, db: Session = DB):
+    document = svc.get_document_or_404(db, document_id, user)
+    return svc.set_amendment(db, document, body.amendment_of_id, body.amended_fields, user)
 
 
 @router.put("/{document_id}/link", response_model=DocumentOut, summary="Link a related document for cross-document checks")

@@ -12,6 +12,7 @@ const ACCEPT = '.pdf,.docx,.png,.jpg,.jpeg,.tif,.tiff'
 const MAX_MB = 25
 const MAX_FILES = 20
 const POLL_MS = 2000
+const AMENDABLE = ['notional_amount', 'effective_date', 'maturity_date', 'interest_rate', 'margin', 'commitment_fee', 'counterparty', 'governing_law', 'settlement_terms', 'payment_frequency', 'forward_rate', 'value_date', 'currency_pair', 'credit_support', 'repayment_terms']
 
 export default function UploadDocument() {
   const packs = useAsync(() => rulePacks.list(), [])
@@ -20,6 +21,8 @@ export default function UploadDocument() {
   const [docType, setDocType] = useState('term_sheet')
   const [pack, setPack] = useState('')
   const [related, setRelated] = useState('')
+  const [amendmentOf, setAmendmentOf] = useState('')
+  const [amended, setAmended] = useState([])
   const [drag, setDrag] = useState(false)
   const [error, setError] = useState(null)
   const [busy, setBusy] = useState(false)
@@ -50,7 +53,7 @@ export default function UploadDocument() {
     setError(null)
     try {
       if (files.length === 1) {
-        const doc = await documents.upload({ file: files[0], doc_type: docType, rule_pack_key: pack || null, related_document_id: related || null })
+        const doc = await documents.upload({ file: files[0], doc_type: docType, rule_pack_key: pack || null, related_document_id: related || null, amendment_of_id: amendmentOf || null, amended_fields: amended })
         setBatch({ accepted: 1, rejected: 0, results: [{ filename: files[0].name, accepted: true, document_id: doc.id, status: doc.status, reason: null }] })
       } else {
         setBatch(await documents.bulkUpload({ files, doc_type: docType, rule_pack_key: pack || null }))
@@ -130,6 +133,26 @@ export default function UploadDocument() {
                 </select>
               </Field>
             </div>
+            {files.length <= 1 && (
+              <Field label="Amendment of (optional)" hint="Link the original this document amends, then tick the terms the amendment changes. Changes to anything else are flagged.">
+                <select value={amendmentOf} onChange={(e) => { setAmendmentOf(e.target.value); if (!e.target.value) setAmended([]) }}>
+                  <option value="">None</option>
+                  {(candidates.data?.items || []).map((d) => (
+                    <option key={d.id} value={d.id}>#{d.id} · {d.original_filename}</option>
+                  ))}
+                </select>
+                {amendmentOf && (
+                  <div className="row" style={{ gap: 6, marginTop: 8 }}>
+                    {AMENDABLE.map((f) => (
+                      <label key={f} className={`pill ${amended.includes(f) ? 'pill-info' : 'pill-plain'}`} style={{ cursor: 'pointer' }}>
+                        <input type="checkbox" hidden checked={amended.includes(f)} onChange={(e) => setAmended((a) => (e.target.checked ? [...a, f] : a.filter((x) => x !== f)))} />
+                        {f.replace(/_/g, ' ')}
+                      </label>
+                    ))}
+                  </div>
+                )}
+              </Field>
+            )}
             {files.length <= 1 && (
               <Field label="Compare against (optional)" hint="e.g. the confirmation for this term sheet.">
                 <select value={related} onChange={(e) => setRelated(e.target.value)}>

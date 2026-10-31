@@ -1,5 +1,6 @@
 """Load rule packs from YAML files (bundled defaults) or the database (admin-editable)."""
 
+import re
 from pathlib import Path
 
 import yaml
@@ -74,6 +75,9 @@ def detect_pack_key(db: Session, text: str, entity_texts: list[str]) -> str:
     for key in available_keys(db):
         cfg, _ = active_pack(db, key)
         score = sum(haystack.count(kw.lower()) for kw in cfg.applies_to)
+        # An explicit mention of the standard ("ISDA", "LMA", "LSTA") outweighs generic vocabulary
+        # shared between loan markets.
+        score += 10 * len(re.findall(rf"\b{re.escape(key.replace('_', ' '))}\b", haystack))
         if score > best_score:
             best_key, best_score = key, score
     return best_key or "isda"

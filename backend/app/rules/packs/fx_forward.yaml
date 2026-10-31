@@ -1,0 +1,278 @@
+# FX forward / NDF term sheets and confirmations (ISDA FX definitions). Same schema as isda.yaml.
+
+key: fx_forward
+name: FX Forward / NDF Term Sheet
+version: "1.0.0"
+description: >
+  Economics and settlement terms for outright FX forwards and non-deliverable forwards:
+  currency pair, notional, forward rate, value date, settlement type and fixing.
+applies_to: [fx forward, fx forwards, forward rate, currency pair, value date, spot rate, deliverable, non-deliverable, ndf, fixing date, outright forward, fx definitions, settlement currency]
+
+routing:
+  auto_approve_confidence: 0.85
+  block_severities: [error, critical]
+  min_auto_approve_score: 0.7
+
+ml:
+  enabled: false   # the bootstrap anomaly model is trained on rate/loan shapes, not FX
+  severity: warning
+  anomaly_threshold: 0.6
+
+rules:
+  # --- mandatory clauses -----------------------------------------------------------
+  - id: fx.pair.present
+    check: presence
+    field: currency_pair
+    severity: critical
+    confidence: 0.95
+    title: Currency pair missing
+    explanation: No currency pair was found. An FX forward must state the base and quote currencies.
+    tags: [mandatory]
+
+  - id: fx.notional.present
+    check: presence
+    field: notional_amount
+    severity: critical
+    confidence: 0.95
+    title: Notional amount missing
+    explanation: No notional amount was found.
+    tags: [mandatory]
+
+  - id: fx.forward_rate.present
+    check: presence
+    field: forward_rate
+    severity: critical
+    confidence: 0.95
+    title: Forward rate missing
+    explanation: No forward / contract rate was found; without it the settlement amount cannot be determined.
+    tags: [mandatory]
+
+  - id: fx.value_date.present
+    check: presence
+    field: value_date
+    severity: critical
+    confidence: 0.95
+    title: Value date missing
+    explanation: No value / delivery date was found.
+    tags: [mandatory]
+
+  - id: fx.counterparties.present
+    check: min_count
+    field: counterparty
+    params: {min: 2}
+    severity: critical
+    confidence: 0.95
+    title: Fewer than two counterparties identified
+    explanation: Only {count} counterparty was identified; both parties to the forward must be named.
+    tags: [mandatory]
+
+  - id: fx.settlement.present
+    check: presence
+    field: settlement_terms
+    severity: error
+    confidence: 0.85
+    title: Settlement type missing
+    explanation: No settlement type was found; the sheet must state whether the forward is deliverable or non-deliverable.
+    tags: [mandatory]
+
+  - id: fx.governing_law.present
+    check: presence
+    field: governing_law
+    severity: critical
+    confidence: 0.95
+    title: Governing law missing
+    explanation: No governing law clause was found.
+    tags: [mandatory, legal]
+
+  - id: fx.ndf.fixing_date_required
+    check: conditional_presence
+    params: {when_field: settlement_terms, when_path: type, equals: non_deliverable, require_field: fixing_date}
+    severity: error
+    confidence: 0.9
+    title: NDF without a fixing date
+    explanation: Settlement is "{condition_value}" (non-deliverable) but no {field_label} was found; an NDF needs a fixing / valuation date for the reference rate.
+    tags: [mandatory]
+
+  # --- format ------------------------------------------------------------------------
+  - id: fx.pair.format
+    check: normalized
+    field: currency_pair
+    severity: error
+    confidence: 0.85
+    title: Currency pair unreadable
+    explanation: The currency pair "{raw}" could not be parsed into two ISO currency codes.
+    tags: [format]
+
+  - id: fx.forward_rate.format
+    check: normalized
+    field: forward_rate
+    severity: error
+    confidence: 0.85
+    title: Forward rate unreadable
+    explanation: The forward rate "{raw}" could not be parsed as a decimal rate.
+    tags: [format]
+
+  - id: fx.value_date.format
+    check: normalized
+    field: value_date
+    severity: error
+    confidence: 0.85
+    title: Value date unreadable
+    explanation: The value date "{raw}" could not be parsed as a date.
+    tags: [format]
+
+  - id: fx.settlement.format
+    check: normalized
+    field: settlement_terms
+    severity: warning
+    confidence: 0.8
+    title: Settlement type unclear
+    explanation: The settlement clause "{raw}" does not state deliverable, non-deliverable, cash or physical settlement.
+    tags: [format]
+
+  # --- consistency / plausibility ----------------------------------------------------
+  - id: fx.dates.trade_before_value
+    check: date_order
+    params: {earlier: trade_date, later: value_date}
+    severity: critical
+    confidence: 0.95
+    title: Value date not after trade date
+    explanation: The {later_field} ({later}) is not after the {earlier_field} ({earlier}).
+    tags: [consistency]
+
+  - id: fx.tenor.range
+    check: tenor_range
+    params: {start: trade_date, end: value_date, min_years: 0.005, max_years: 5}
+    severity: warning
+    confidence: 0.8
+    title: Unusual forward tenor
+    explanation: The tenor of {years} years is outside the {min}-{max} year range typical for an FX forward.
+    tags: [plausibility]
+
+  - id: fx.notional.currency_in_pair
+    check: value_in_other
+    field: notional_amount
+    params: {path: currency, other_field: currency_pair, other_paths: [base, quote]}
+    severity: error
+    confidence: 0.9
+    title: Notional currency not in the currency pair
+    explanation: The notional is denominated in {value} but the {other_field} only contains {allowed}.
+    tags: [consistency]
+
+  - id: fx.forward_vs_spot
+    check: relative_difference
+    field: forward_rate
+    params: {path: rate, other_field: spot_rate, other_path: rate, max_pct: 10}
+    severity: warning
+    confidence: 0.8
+    title: Forward rate far from spot
+    explanation: The forward rate {value} differs from the {other_field} {other_value} by {pct}%, more than the {max}% expected from interest-rate differentials; check for a transposed digit.
+    tags: [plausibility]
+
+  - id: fx.forward_rate.range
+    check: range
+    field: forward_rate
+    params: {path: rate, min: 0.0001, max: 100000}
+    severity: warning
+    confidence: 0.7
+    title: Forward rate outside plausible range
+    explanation: A forward rate of {value} is outside the plausible range for any quoted pair.
+    tags: [plausibility]
+
+  - id: fx.notional.range
+    check: range
+    field: notional_amount
+    params: {path: amount, min: 10000, max: 5000000000}
+    severity: warning
+    confidence: 0.75
+    title: Notional outside typical range
+    explanation: Notional of {value} {currency} is outside the {min}-{max} range typical for an FX forward; verify it is not a units or OCR error.
+    tags: [plausibility]
+
+  - id: fx.counterparties.distinct
+    check: distinct_values
+    field: counterparty
+    params: {path: key}
+    severity: error
+    confidence: 0.9
+    title: Same entity named for both parties
+    explanation: '"{value}" and "{other}" resolve to the same legal entity; a party cannot face itself.'
+    tags: [consistency]
+
+  - id: fx.governing_law.allowed
+    check: allowed_values
+    field: governing_law
+    params: {path: jurisdiction, values: [England and Wales, New York]}
+    severity: warning
+    confidence: 0.8
+    title: Non-standard governing law
+    explanation: Governing law is {value}; FX documentation under ISDA definitions is conventionally governed by {allowed}.
+    tags: [legal]
+
+  - id: fx.extraction.low_confidence
+    check: min_confidence
+    params: {threshold: 0.7}
+    severity: info
+    confidence: 0.6
+    title: Low extraction confidence
+    explanation: The {field_label} value "{raw}" was extracted with confidence {confidence} (below {threshold}); please verify it against the source.
+    tags: [quality]
+
+cross_document_rules:
+  - id: fx.xdoc.forward_rate
+    check: cross_doc_equal
+    field: forward_rate
+    params: {path: rate}
+    severity: critical
+    confidence: 0.95
+    title: Forward rate differs from related document
+    explanation: This document states {raw} but the related document states {related_raw}.
+    tags: [cross_document]
+
+  - id: fx.xdoc.notional
+    check: cross_doc_equal
+    field: notional_amount
+    params: {path: amount, tolerance: 0}
+    severity: critical
+    confidence: 0.95
+    title: Notional differs from related document
+    explanation: This document states {raw} but the related document states {related_raw}.
+    tags: [cross_document]
+
+  - id: fx.xdoc.value_date
+    check: cross_doc_equal
+    field: value_date
+    params: {path: date}
+    severity: critical
+    confidence: 0.95
+    title: Value date differs from related document
+    explanation: This document states {raw} but the related document states {related_raw}.
+    tags: [cross_document]
+
+amendment_rules:
+  - id: fx.amend.core_term_changed
+    check: amendment_changes
+    params: {mode: undeclared, fields: [notional_amount, forward_rate, value_date, currency_pair, counterparty, governing_law]}
+    severity: critical
+    confidence: 0.9
+    title: Undeclared change to a core term
+    explanation: The {field_label} changed from "{related_value}" to "{value}" but the amendment does not list it as amended.
+    tags: [amendment]
+
+  - id: fx.amend.undeclared_change
+    check: amendment_changes
+    params: {mode: undeclared, exclude_fields: [notional_amount, forward_rate, value_date, currency_pair, counterparty, governing_law]}
+    severity: warning
+    confidence: 0.75
+    title: Change not listed as amended
+    explanation: The {field_label} changed from "{related_value}" to "{value}" but is not among the declared amendments.
+    tags: [amendment]
+
+  - id: fx.amend.declared_unchanged
+    check: amendment_changes
+    params: {mode: declared_unchanged}
+    severity: info
+    confidence: 0.6
+    title: Declared amendment shows no change
+    explanation: The {field_label} was declared as amended but reads the same as the original ("{value}").
+    tags: [amendment]

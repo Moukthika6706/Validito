@@ -216,6 +216,10 @@ def normalize_settlement(text: str) -> dict[str, Any] | None:
     if not text:
         return None
     low = text.lower()
+    if "non-deliverable" in low or "non deliverable" in low or re.search(r"\bndf\b", low):
+        return {"type": "non_deliverable", "raw": text.strip()}
+    if "deliverable" in low:
+        return {"type": "deliverable", "raw": text.strip()}
     if "physical" in low:
         return {"type": "physical", "raw": text.strip()}
     if "cash" in low:
@@ -265,6 +269,44 @@ def normalize_day_count(text: str) -> dict[str, Any] | None:
         if any(alias.replace(" ", "") in low for alias in aliases):
             return {"convention": canonical, "raw": text.strip()}
     return None
+
+
+_PAIR_RE = re.compile(r"\b([A-Z]{3})\s*[/\-]\s*([A-Z]{3})\b")
+
+
+def parse_currency_pair(text: str) -> dict[str, Any] | None:
+    """'EUR/USD', 'GBP-USD', 'USDJPY' -> base / quote."""
+    if not text:
+        return None
+    up = text.upper()
+    m = _PAIR_RE.search(up)
+    if not m:
+        m6 = re.search(r"\b([A-Z]{6})\b", up)
+        if not m6 or m6.group(1)[:3] not in ISO_CURRENCIES or m6.group(1)[3:] not in ISO_CURRENCIES:
+            return None
+        base, quote = m6.group(1)[:3], m6.group(1)[3:]
+    else:
+        base, quote = m.group(1), m.group(2)
+    if base not in ISO_CURRENCIES or quote not in ISO_CURRENCIES or base == quote:
+        return None
+    return {"base": base, "quote": quote, "pair": f"{base}/{quote}"}
+
+
+_FX_RATE_RE = re.compile(r"(?<![\d.])(\d{1,4}(?:\.\d{2,8}))(?![\d.])")
+
+
+def parse_fx_rate(text: str) -> dict[str, Any] | None:
+    """'1.0850', 'EUR/USD 1.08500', '148.25 JPY per USD' -> decimal rate (+ pair if present)."""
+    if not text:
+        return None
+    m = _FX_RATE_RE.search(text.replace(",", ""))
+    if not m:
+        return None
+    out: dict[str, Any] = {"rate": float(m.group(1)), "raw": text.strip()}
+    pair = parse_currency_pair(text)
+    if pair:
+        out["pair"] = pair["pair"]
+    return out
 
 
 def normalize_text(text: str) -> dict[str, Any] | None:

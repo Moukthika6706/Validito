@@ -54,10 +54,11 @@ class RulePackConfig(BaseModel):
     ml: MLPolicy = Field(default_factory=MLPolicy)
     rules: list[Rule] = Field(default_factory=list)
     cross_document_rules: list[Rule] = Field(default_factory=list)
+    amendment_rules: list[Rule] = Field(default_factory=list, description="Run only when the document is linked as an amendment of another")
 
     model_config = {"extra": "forbid"}
 
-    @field_validator("rules", "cross_document_rules")
+    @field_validator("rules", "cross_document_rules", "amendment_rules")
     @classmethod
     def _unique_ids(cls, rules: list[Rule]) -> list[Rule]:
         seen: set[str] = set()
@@ -68,4 +69,4 @@ class RulePackConfig(BaseModel):
         return rules
 
     def rule_by_id(self, rule_id: str) -> Rule | None:
-        return next((r for r in [*self.rules, *self.cross_document_rules] if r.id == rule_id), None)
+        return next((r for r in [*self.rules, *self.cross_document_rules, *self.amendment_rules] if r.id == rule_id), None)

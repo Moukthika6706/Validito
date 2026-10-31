@@ -54,6 +54,7 @@ def test_clean_document_has_no_findings(isda):
     assert result.errors == {}
     assert result.findings == []
     assert result.rules_evaluated > 20
+    assert all(r.startswith(("isda.xdoc", "isda.amend")) for r in result.rules_skipped)
 
 
 def test_missing_governing_law_is_critical(isda):
@@ -115,7 +116,7 @@ def test_cross_document_rules_only_run_with_related(isda):
     related.id = 2
 
     alone = evaluate(isda, RuleContext(document=doc))
-    assert all(r.startswith("isda.xdoc") for r in alone.rules_skipped)
+    assert all(r.startswith(("isda.xdoc", "isda.amend")) for r in alone.rules_skipped)
 
     paired = evaluate(isda, RuleContext(document=doc, related=related))
     f = next(x for x in paired.findings if x.rule_id == "isda.xdoc.notional")

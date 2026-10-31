@@ -58,7 +58,13 @@ def seed_samples(db, analyst: User) -> None:
         ("isda_irs_confirmation.pdf", DocumentType.confirmation, "isda", "isda_irs_clean.pdf"),
         ("isda_irs_faulty.pdf", DocumentType.term_sheet, "isda", None),
         ("lma_term_loan_clean.docx", DocumentType.term_sheet, "lma", None),
+        ("lsta_term_loan_b_clean.pdf", DocumentType.term_sheet, "lsta", None),
+        ("lsta_term_loan_b_faulty.pdf", DocumentType.term_sheet, "lsta", None),
+        ("fx_forward_clean.pdf", DocumentType.term_sheet, "fx_forward", None),
+        ("fx_forward_faulty.pdf", DocumentType.term_sheet, "fx_forward", None),
     ]
+    # (file, amends, declared amended fields): the governing-law change is deliberately undeclared.
+    amendments = [("isda_irs_amendment.pdf", "isda_irs_clean.pdf", ["interest_rate"])]
     created = {}
     with patch("app.workers.tasks.enqueue_processing"):  # process inline below
         for name, doc_type, pack, related_name in plan:
@@ -74,6 +80,16 @@ def seed_samples(db, analyst: User) -> None:
             run_validation(db, doc)
             db.refresh(doc)
             print(f"  {name:<28} -> {doc.status.value}")
+        for name, base_name, fields in amendments:
+            path = SAMPLES / name
+            if not path.exists() or base_name not in created:
+                continue
+            doc = create_document(db, owner=analyst, filename=name, content=path.read_bytes(), doc_type=DocumentType.term_sheet,
+                                  rule_pack_key="isda", amendment_of_id=created[base_name].id, amended_fields=fields)
+            run_extraction(db, doc)
+            run_validation(db, doc)
+            db.refresh(doc)
+            print(f"  {name:<28} -> {doc.status.value} (amends {base_name})")
 
 
 def main() -> None:

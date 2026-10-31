@@ -140,7 +140,7 @@ def test_rule_pack_admin_flow(client, db):
     analyst = register_and_login(client, "ana@example.com")
 
     packs = client.get("/api/v1/rule-packs", headers=analyst).json()
-    assert {p["key"] for p in packs} == {"isda", "lma"}  # seeded at startup
+    assert {p["key"] for p in packs} == {"isda", "lma", "lsta", "fx_forward"}  # seeded at startup
     isda = client.get("/api/v1/rule-packs/isda", headers=analyst).json()
     assert isda["rule_count"] > 20 and isda["config"]["routing"]["auto_approve_confidence"] == 0.85
     checks = client.get("/api/v1/rule-packs/checks", headers=analyst).json()

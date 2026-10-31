@@ -196,7 +196,7 @@ Full interactive docs at `/docs`.
 | Area | Endpoints |
 |---|---|
 | Auth | `POST /auth/register`, `POST /auth/login`, `GET /auth/me` |
-| Documents | `POST /documents` (upload, 202), `POST /documents/bulk` (many files, per-file accept/reject), `GET /documents/status?ids=` (poll-friendly), `GET /documents`, `GET /documents/{id}`, `/text`, `/entities` (with `bbox` provenance), `/file`, `/pages`, `/pages/{n}.png` (rendered page for the overlay), `/report.pdf` (full validation report), `/flags`, `/runs`, `POST /{id}/reprocess`, `POST /{id}/validate`, `PUT /{id}/link` |
+| Documents | `POST /documents` (upload, 202), `POST /documents/bulk` (many files, per-file accept/reject), `GET /documents/status?ids=` (poll-friendly), `GET /documents`, `GET /documents/{id}`, `/text`, `/entities` (with `bbox` provenance), `/file`, `/pages`, `PUT /{id}/amendment`, `/pages/{n}.png` (rendered page for the overlay), `/report.pdf` (full validation report), `/flags`, `/runs`, `POST /{id}/reprocess`, `POST /{id}/validate`, `PUT /{id}/link` |
 | Validation | `GET /validation/runs/{id}`, `GET /flags/{id}` |
 | Review (reviewer+) | `GET /review/queue`, `POST`/`DELETE /review/documents/{id}/claim` (soft lock, `409` if held by someone else), `POST /review/flags/{id}/actions`, `POST /review/documents/{id}/complete` |
 | Audit | `GET /audit`, `GET /audit/documents/{id}`, `GET /audit/event-types`, `GET /audit/verify` (admin) |
@@ -221,6 +221,22 @@ Full interactive docs at `/docs`.
 A new pack is a new YAML file with its own `key`; it is seeded on the next boot and selectable at
 upload (or auto-detected from its `applies_to` keywords). Admins can also edit rules from the UI —
 each edit cuts a new pack version, and flags keep the snapshot of the version that raised them.
+
+## Rule packs and amendments
+
+Four packs ship: **ISDA** (derivatives), **LMA** (UK/EU loans), **LSTA** (US loans: Term Loan
+A/B, revolvers — administrative agent, applicable margin, commitment fee, Term SOFR, New York
+law) and **FX forward / NDF** (currency pair, forward vs spot, value date, deliverability, NDF
+fixing date). Auto-detection scores each pack's `applies_to` keywords and strongly boosts an
+explicit mention of the standard.
+
+A document can be uploaded (or later linked with `PUT /documents/{id}/amendment`) as an
+**amendment** of another, declaring which fields it changes. Every pack carries
+`amendment_rules` built on the `amendment_changes` check: an undeclared change to a core term
+(notional, maturity, governing law, parties, …) is *critical*, any other undeclared change is a
+*warning*, and a declared field that did not actually change is *info*. Other new check types:
+`relative_difference` (forward vs spot), `conditional_presence` (NDF ⇒ fixing date) and
+`value_in_other` (notional currency ∈ pair).
 
 ## LLM-assisted extraction fallback
 

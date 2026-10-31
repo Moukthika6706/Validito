@@ -85,6 +85,95 @@ LMA_CLEAN = [
 ]
 
 
+LSTA_CLEAN = [
+    ("SENIOR SECURED TERM LOAN B - SUMMARY OF TERMS (LSTA)", None),
+    ("Borrower", "Contoso US Holdings Inc."),
+    ("Administrative Agent", "Barclays Bank PLC"),
+    ("Lead Arranger", "Barclays Bank PLC"),
+    ("Facility Type", "Term Loan B"),
+    ("Facility Amount", "USD 350,000,000"),
+    ("Purpose", "Acquisition financing and general corporate purposes"),
+    ("Closing Date", "1 May 2026"),
+    ("Maturity Date", "1 May 2033"),
+    ("Interest Rate", "Term SOFR plus Applicable Margin"),
+    ("Margin", "3.50% per annum"),
+    ("Commitment Fee", "50 bps"),
+    ("Interest Period", "3 months"),
+    ("Repayment", "1.00% per annum amortization, balance at maturity"),
+    ("Security", "First-priority lien on substantially all assets"),
+    ("Governing Law", "New York"),
+    ("Documentation", "LSTA standard credit agreement"),
+]
+
+LSTA_FAULTY = [
+    ("SENIOR SECURED TERM LOAN B - SUMMARY OF TERMS (LSTA)", None),
+    ("Borrower", "Contoso US Holdings Inc."),
+    ("Administrative Agent", "Barclays Bank PLC"),
+    ("Facility Type", "Term Loan B"),
+    ("Facility Amount", "EUR 350,000,000"),       # non-USD under US conventions
+    ("Closing Date", "1 May 2026"),
+    ("Maturity Date", "1 May 2025"),              # before closing
+    ("Interest Rate", "3-month LIBOR plus Applicable Margin"),  # discontinued benchmark
+    ("Margin", "15.00% per annum"),               # off-market
+    ("Repayment", "Bullet at maturity"),
+    ("Documentation", "LSTA standard credit agreement"),
+    # governing law, commitment fee, purpose, security deliberately missing
+]
+
+FX_FORWARD_CLEAN = [
+    ("FX FORWARD - TERM SHEET", None),
+    ("Transaction Type", "FX Forward (outright forward)"),
+    ("Trade Date", "15 March 2026"),
+    ("Party A", "Barclays Bank PLC"),
+    ("Party B", "Northwind Industries Ltd"),
+    ("Currency Pair", "EUR/USD"),
+    ("Notional Amount", "EUR 10,000,000"),
+    ("Spot Rate", "1.0790"),
+    ("Forward Rate", "1.0850"),
+    ("Value Date", "15 September 2026"),
+    ("Settlement", "Deliverable"),
+    ("Governing Law", "English law"),
+    ("Documentation", "ISDA 2002 Master Agreement and 1998 FX Definitions"),
+]
+
+FX_FORWARD_FAULTY = [
+    ("FX FORWARD - TERM SHEET", None),
+    ("Transaction Type", "FX Forward (non-deliverable)"),
+    ("Trade Date", "15 March 2026"),
+    ("Party A", "Barclays Bank PLC"),
+    ("Party B", "Northwind Industries Ltd"),
+    ("Currency Pair", "USD/INR"),
+    ("Notional Amount", "GBP 10,000,000"),        # currency not in the pair
+    ("Spot Rate", "83.20"),
+    ("Forward Rate", "93.80"),                    # >10% from spot
+    ("Value Date", "15 March 2026"),              # not after trade date
+    ("Settlement", "Non-deliverable (NDF)"),      # ... but no fixing date
+    # governing law deliberately missing
+]
+
+# Amendment of ISDA_CLEAN: the fixed rate change is declared; the governing law change is not.
+ISDA_AMENDMENT = [
+    ("AMENDMENT TO INTEREST RATE SWAP TERM SHEET", None),
+    ("Trade Date", "15 March 2026"),
+    ("Effective Date", "17 March 2026"),
+    ("Termination Date", "17 March 2031"),
+    ("Notional Amount", "USD 50,000,000"),
+    ("Party A", "Barclays Bank PLC"),
+    ("Party B", "Northwind Industries Ltd"),
+    ("Fixed Rate Payer", "Party B"),
+    ("Fixed Rate", "3.90% per annum"),
+    ("Floating Rate Option", "3-month SOFR plus 45 bps"),
+    ("Payment Frequency", "Quarterly"),
+    ("Fixed Rate Day Count Fraction", "30/360"),
+    ("Business Day Convention", "Modified Following"),
+    ("Calculation Agent", "Barclays Bank PLC"),
+    ("Settlement", "Cash settlement"),
+    ("Credit Support", "ISDA Credit Support Annex (2016 VM)"),
+    ("Governing Law", "New York law"),
+    ("Documentation", "ISDA 2002 Master Agreement"),
+]
+
+
 def write_pdf(rows, path: Path) -> None:
     doc = fitz.open()
     page = doc.new_page()
@@ -131,6 +220,11 @@ def main() -> None:
     write_pdf(ISDA_CONFIRMATION, SAMPLES / "isda_irs_confirmation.pdf")
     write_docx(LMA_CLEAN, SAMPLES / "lma_term_loan_clean.docx")
     write_scanned_png(ISDA_CLEAN, SAMPLES / "isda_irs_scanned.png")
+    write_pdf(LSTA_CLEAN, SAMPLES / "lsta_term_loan_b_clean.pdf")
+    write_pdf(LSTA_FAULTY, SAMPLES / "lsta_term_loan_b_faulty.pdf")
+    write_pdf(FX_FORWARD_CLEAN, SAMPLES / "fx_forward_clean.pdf")
+    write_pdf(FX_FORWARD_FAULTY, SAMPLES / "fx_forward_faulty.pdf")
+    write_pdf(ISDA_AMENDMENT, SAMPLES / "isda_irs_amendment.pdf")
     print(f"Wrote samples to {SAMPLES}")
 
 

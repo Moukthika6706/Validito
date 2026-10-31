@@ -17,12 +17,14 @@ export const documents = {
   text: (id) => api.get(`${V1}/documents/${id}/text`),
   flags: (id, params) => api.get(`${V1}/documents/${id}/flags`, params),
   runs: (id) => api.get(`${V1}/documents/${id}/runs`),
-  upload: ({ file, doc_type, rule_pack_key, related_document_id }) => {
+  upload: ({ file, doc_type, rule_pack_key, related_document_id, amendment_of_id, amended_fields }) => {
     const form = new FormData()
     form.append('file', file)
     form.append('doc_type', doc_type)
     if (rule_pack_key) form.append('rule_pack_key', rule_pack_key)
     if (related_document_id) form.append('related_document_id', related_document_id)
+    if (amendment_of_id) form.append('amendment_of_id', amendment_of_id)
+    if (amendment_of_id && amended_fields?.length) form.append('amended_fields', amended_fields.join(','))
     return api.postForm(`${V1}/documents`, form)
   },
   reprocess: (id) => api.post(`${V1}/documents/${id}/reprocess`),
@@ -38,6 +40,7 @@ export const documents = {
   },
   revalidate: (id) => api.post(`${V1}/documents/${id}/validate`),
   link: (id, related_document_id) => api.put(`${V1}/documents/${id}/link`, { related_document_id }),
+  setAmendment: (id, amendment_of_id, amended_fields) => api.put(`${V1}/documents/${id}/amendment`, { amendment_of_id, amended_fields }),
 }
 
 export const validation = {

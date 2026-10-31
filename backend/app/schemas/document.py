@@ -46,6 +46,8 @@ class DocumentOut(ORMModel):
     rule_pack_key: str | None
     status: DocumentStatus
     related_document_id: int | None
+    amendment_of_id: int | None = None
+    amended_fields: list[str] | None = None
     page_count: int | None
     ocr_used: bool
     error_message: str | None
@@ -98,6 +100,11 @@ class BulkUploadResult(BaseModel):
     accepted: int
     rejected: int
     results: list[BulkFileResult]
+
+
+class AmendmentLink(BaseModel):
+    amendment_of_id: int | None = Field(description="Document this one amends; null to unlink.")
+    amended_fields: list[str] = Field(default_factory=list, description="Entity types the amendment declares as changed, e.g. ['interest_rate'].")
 
 
 class DocumentLink(BaseModel):

@@ -28,6 +28,8 @@ def create_document(
     doc_type: DocumentType,
     rule_pack_key: str | None,
     related_document_id: int | None = None,
+    amendment_of_id: int | None = None,
+    amended_fields: list[str] | None = None,
 ) -> Document:
     try:
         info = validate_upload(filename, content, max_bytes=get_settings().max_upload_bytes)
@@ -37,6 +39,9 @@ def create_document(
     if related_document_id is not None:
         related = get_document_or_404(db, related_document_id, owner)
         related_document_id = related.id
+    if amendment_of_id is not None:
+        amendment_of_id = get_document_or_404(db, amendment_of_id, owner).id
+    amended_fields = _clean_fields(amended_fields) if amendment_of_id else None
 
     rel_path, digest = store_upload(owner.id, info.extension, content)
     document = Document(
@@ -49,6 +54,8 @@ def create_document(
         doc_type=doc_type,
         rule_pack_key=rule_pack_key,
         related_document_id=related_document_id,
+        amendment_of_id=amendment_of_id,
+        amended_fields=amended_fields,
         status=DocumentStatus.queued,
     )
     db.add(document)
@@ -63,6 +70,7 @@ def create_document(
         payload={
             "filename": info.filename, "mime_type": info.mime_type, "size_bytes": info.size_bytes,
             "sha256": digest, "doc_type": doc_type.value, "rule_pack_key": rule_pack_key,
+            "related_document_id": related_document_id, "amendment_of_id": amendment_of_id, "amended_fields": amended_fields,
         },
     )
     db.commit()
@@ -178,6 +186,29 @@ def link_documents(db: Session, document: Document, related_id: int | None, user
         payload={"from": document.related_document_id, "to": related_id},
     )
     document.related_document_id = related_id
+    db.commit()
+    return document
+
+
+def _clean_fields(fields: list[str] | None) -> list[str]:
+    from app.extraction.fields import ENTITY_TYPES
+
+    return sorted({f.strip() for f in (fields or []) if f and f.strip() in ENTITY_TYPES})
+
+
+def set_amendment(db: Session, document: Document, amendment_of_id: int | None, amended_fields: list[str], user: User) -> Document:
+    """Link (or unlink) this document as an amendment of another and record what it declares as changed."""
+    if amendment_of_id is not None:
+        if amendment_of_id == document.id:
+            raise HTTPException(422, "A document cannot amend itself.")
+        amendment_of_id = get_document_or_404(db, amendment_of_id, user).id
+    cleaned = _clean_fields(amended_fields) if amendment_of_id else []
+    record(
+        db, event_type=events.DOCUMENT_LINKED, target_type="document", target_id=document.id, document_id=document.id, actor_id=user.id,
+        payload={"kind": "amendment", "from": document.amendment_of_id, "to": amendment_of_id, "amended_fields": cleaned},
+    )
+    document.amendment_of_id = amendment_of_id
+    document.amended_fields = cleaned or None
     db.commit()
     return document
 

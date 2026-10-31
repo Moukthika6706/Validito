@@ -29,6 +29,10 @@ def evaluate(pack: RulePackConfig, ctx: RuleContext, *, include_cross_document: 
         rules += pack.cross_document_rules
     elif pack.cross_document_rules:
         result.rules_skipped += [r.id for r in pack.cross_document_rules]
+    if ctx.amendment_of is not None:
+        rules += pack.amendment_rules
+    elif pack.amendment_rules:
+        result.rules_skipped += [r.id for r in pack.amendment_rules]
 
     for rule in rules:
         if not rule.enabled:

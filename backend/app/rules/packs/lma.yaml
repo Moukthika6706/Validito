@@ -301,3 +301,31 @@ cross_document_rules:
     title: Parties differ from related document
     explanation: "Parties only in this document: {only_here}. Parties only in the related document: {only_related}."
     tags: [cross_document]
+
+amendment_rules:
+  - id: lma.amend.core_term_changed
+    check: amendment_changes
+    params: {mode: undeclared, fields: [notional_amount, maturity_date, effective_date, governing_law, counterparty, margin]}
+    severity: critical
+    confidence: 0.9
+    title: Undeclared change to a core term
+    explanation: The {field_label} changed from "{related_value}" to "{value}" but the amendment does not list it as amended.
+    tags: [amendment]
+
+  - id: lma.amend.undeclared_change
+    check: amendment_changes
+    params: {mode: undeclared, exclude_fields: [notional_amount, maturity_date, effective_date, governing_law, counterparty, margin]}
+    severity: warning
+    confidence: 0.75
+    title: Change not listed as amended
+    explanation: The {field_label} changed from "{related_value}" to "{value}" but is not among the declared amendments.
+    tags: [amendment]
+
+  - id: lma.amend.declared_unchanged
+    check: amendment_changes
+    params: {mode: declared_unchanged}
+    severity: info
+    confidence: 0.6
+    title: Declared amendment shows no change
+    explanation: The {field_label} was declared as amended but reads the same as the original ("{value}").
+    tags: [amendment]

@@ -59,6 +59,8 @@ class DocumentView:
 class RuleContext:
     document: DocumentView
     related: DocumentView | None = None
+    amendment_of: DocumentView | None = None  # the document this one amends
+    declared_amendments: list[str] = field(default_factory=list)  # entity types the uploader said changed
 
 
 @dataclass

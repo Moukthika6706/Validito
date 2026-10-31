@@ -207,6 +207,8 @@ def extract_by_ner(extracted: ExtractedText, already_found: set[str]) -> list[En
                 continue
             window = low[max(0, ent.start_char - CONTEXT_WINDOW): ent.end_char + CONTEXT_WINDOW]
             has_context = any(k in window for k in spec.context_keywords)
+            if not has_context:
+                continue  # a bare DATE / MONEY / ORG with no supporting words nearby is not evidence for this field
             normalized = _safe_normalize(spec, ent.text)
             if normalized is None and spec.normalizer is not None:
                 continue  # NER fallback only keeps values we can actually interpret

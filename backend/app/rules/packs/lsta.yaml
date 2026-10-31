@@ -1,0 +1,332 @@
+# LSTA-style US loan market conventions (term loans, revolvers documented on Loan Syndications
+# and Trading Association forms). Same schema as isda.yaml / lma.yaml.
+
+key: lsta
+name: LSTA US Loan Facility Term Sheet
+version: "1.0.0"
+description: >
+  Mandatory commercial and legal terms for US syndicated loan term sheets documented on LSTA
+  standard forms (Term Loan A/B, revolving credit facilities).
+applies_to: [lsta, administrative agent, term loan b, term loan a, revolving credit facility, applicable margin, commitment fee, lead arranger, bookrunner, first lien, second lien, credit agreement, term sofr]
+
+routing:
+  auto_approve_confidence: 0.85
+  block_severities: [error, critical]
+  min_auto_approve_score: 0.7
+
+ml:
+  enabled: true
+  severity: warning
+  anomaly_threshold: 0.6
+
+rules:
+  # --- mandatory clauses -----------------------------------------------------------
+  - id: lsta.facility_amount.present
+    check: presence
+    field: notional_amount
+    severity: critical
+    confidence: 0.95
+    title: Facility amount missing
+    explanation: No facility / commitment amount was found. A credit agreement term sheet must state the aggregate commitments.
+    tags: [mandatory]
+
+  - id: lsta.parties.present
+    check: min_count
+    field: counterparty
+    params: {min: 2}
+    severity: critical
+    confidence: 0.95
+    title: Borrower and lender / agent not both identified
+    explanation: Only {count} party was identified; the term sheet must name at least the borrower and the administrative agent or lenders.
+    tags: [mandatory]
+
+  - id: lsta.agent.present
+    check: regex
+    field: counterparty
+    params: {path: role, pattern: "agent", negate: false}
+    enabled: false   # informational template; agent presence is covered by lsta.parties.present
+    severity: info
+    confidence: 0.5
+    title: Administrative agent named
+    explanation: Party "{raw}" acts as agent.
+    tags: [mandatory]
+
+  - id: lsta.maturity.present
+    check: presence
+    field: maturity_date
+    severity: critical
+    confidence: 0.95
+    title: Maturity date missing
+    explanation: No maturity date or tenor was found.
+    tags: [mandatory]
+
+  - id: lsta.rate.present
+    check: presence
+    field: interest_rate
+    severity: error
+    confidence: 0.9
+    title: Interest rate missing
+    explanation: No interest rate (benchmark plus applicable margin) was found.
+    tags: [mandatory]
+
+  - id: lsta.margin.present
+    check: presence
+    field: margin
+    severity: error
+    confidence: 0.85
+    title: Applicable margin missing
+    explanation: No applicable margin was found. LSTA facilities price as a benchmark (Term SOFR) plus a stated margin.
+    tags: [mandatory]
+
+  - id: lsta.commitment_fee.present
+    check: presence
+    field: commitment_fee
+    severity: warning
+    confidence: 0.7
+    title: Commitment fee not stated
+    explanation: No commitment / undrawn fee was found. Revolving and delayed-draw facilities normally state one; confirm the facility is fully drawn at close.
+    tags: [mandatory]
+
+  - id: lsta.governing_law.present
+    check: presence
+    field: governing_law
+    severity: critical
+    confidence: 0.95
+    title: Governing law missing
+    explanation: No governing law clause was found. LSTA documentation elects a governing law (typically New York).
+    tags: [mandatory, legal]
+
+  - id: lsta.purpose.present
+    check: presence
+    field: purpose
+    severity: warning
+    confidence: 0.8
+    title: Use of proceeds missing
+    explanation: No use-of-proceeds clause was found.
+    tags: [mandatory]
+
+  - id: lsta.repayment.present
+    check: presence
+    field: repayment_terms
+    severity: error
+    confidence: 0.85
+    title: Repayment / amortization terms missing
+    explanation: No amortization or repayment schedule was found.
+    tags: [mandatory]
+
+  - id: lsta.security.present
+    check: presence
+    field: credit_support
+    severity: warning
+    confidence: 0.7
+    title: Security / lien package not stated
+    explanation: No security, guarantee or lien description was found. Confirm whether the facility is unsecured.
+    tags: [mandatory]
+
+  # --- format ------------------------------------------------------------------------
+  - id: lsta.facility_amount.format
+    check: normalized
+    field: notional_amount
+    severity: error
+    confidence: 0.85
+    title: Facility amount unreadable
+    explanation: The facility amount "{raw}" could not be parsed into a currency and figure.
+    tags: [format]
+
+  - id: lsta.maturity.format
+    check: normalized
+    field: maturity_date
+    severity: error
+    confidence: 0.85
+    title: Maturity date unreadable
+    explanation: The maturity "{raw}" could not be parsed as a date or tenor.
+    tags: [format]
+
+  - id: lsta.margin.format
+    check: normalized
+    field: margin
+    severity: error
+    confidence: 0.85
+    title: Margin unreadable
+    explanation: The margin "{raw}" could not be parsed as a percentage or basis points.
+    tags: [format]
+
+  - id: lsta.governing_law.format
+    check: normalized
+    field: governing_law
+    severity: error
+    confidence: 0.85
+    title: Governing law not recognised
+    explanation: The governing law "{raw}" does not match a recognised jurisdiction.
+    tags: [format, legal]
+
+  # --- consistency / plausibility ----------------------------------------------------
+  - id: lsta.dates.closing_before_maturity
+    check: date_order
+    params: {earlier: effective_date, later: maturity_date}
+    severity: critical
+    confidence: 0.95
+    title: Maturity precedes closing date
+    explanation: The {later_field} ({later}) is not after the {earlier_field} ({earlier}).
+    tags: [consistency]
+
+  - id: lsta.tenor.range
+    check: tenor_range
+    params: {start: effective_date, end: maturity_date, min_years: 0.5, max_years: 10}
+    severity: warning
+    confidence: 0.8
+    title: Unusual facility tenor
+    explanation: The tenor of {years} years is outside the {min}-{max} year range typical for a US syndicated loan.
+    tags: [plausibility]
+
+  - id: lsta.facility_amount.range
+    check: range
+    field: notional_amount
+    params: {path: amount, min: 5000000, max: 10000000000}
+    severity: warning
+    confidence: 0.75
+    title: Facility amount outside typical range
+    explanation: Facility amount of {value} {currency} is outside the {min}-{max} range; verify it is not a units or OCR error.
+    tags: [plausibility]
+
+  - id: lsta.margin.range
+    check: range
+    field: margin
+    params: {path: rate_pct, min: 0.5, max: 10, when: {path: type, equals: fixed}}
+    severity: warning
+    confidence: 0.8
+    title: Applicable margin off-market
+    explanation: An applicable margin of {value}% p.a. is outside the {min}-{max}% range expected for a syndicated facility.
+    tags: [plausibility]
+
+  - id: lsta.commitment_fee.range
+    check: range
+    field: commitment_fee
+    params: {path: spread_bps, min: 0, max: 150}
+    severity: warning
+    confidence: 0.75
+    title: Commitment fee off-market
+    explanation: A commitment fee of {value} bps is outside the {min}-{max} bps range typical for undrawn commitments.
+    tags: [plausibility]
+
+  - id: lsta.benchmark.discontinued
+    check: forbidden_values
+    field: interest_rate
+    params: {path: benchmark, values: [LIBOR]}
+    severity: error
+    confidence: 0.95
+    title: Discontinued benchmark referenced
+    explanation: The interest rate references {value}, which has ceased publication; US dollar facilities should reference Term SOFR.
+    tags: [regulatory]
+
+  - id: lsta.currency.usd
+    check: allowed_values
+    field: notional_amount
+    params: {path: currency, values: [USD]}
+    severity: warning
+    confidence: 0.7
+    title: Non-USD facility under US loan conventions
+    explanation: The facility is denominated in {value}; LSTA-form facilities are conventionally USD. Confirm the multicurrency terms.
+    tags: [consistency]
+
+  - id: lsta.parties.borrower_is_lender
+    check: role_conflict
+    field: counterparty
+    params:
+      path: key
+      role_path: role
+      roles_a: [borrower, obligor, guarantor]
+      roles_b: [lender, lenders, administrative_agent, lead_arranger, joint_lead_arrangers, bookrunner]
+    severity: error
+    confidence: 0.9
+    title: Borrower and lender are the same entity
+    explanation: '"{value_a}" ({role_a}) and "{value_b}" ({role_b}) resolve to the same legal entity; a borrower cannot lend to itself.'
+    tags: [consistency]
+
+  - id: lsta.governing_law.allowed
+    check: allowed_values
+    field: governing_law
+    params: {path: jurisdiction, values: [New York, Delaware]}
+    severity: warning
+    confidence: 0.8
+    title: Non-standard governing law
+    explanation: Governing law is {value}; LSTA forms are conventionally governed by {allowed}. Confirm the election is intended.
+    tags: [legal]
+
+  - id: lsta.documentation.lsta
+    check: regex
+    field: documentation
+    params: {path: text, pattern: "lsta|credit agreement"}
+    severity: warning
+    confidence: 0.8
+    title: Documentation is not an LSTA credit agreement
+    explanation: The documentation clause "{raw}" does not reference an LSTA-form credit agreement, yet the LSTA rule pack was applied.
+    tags: [legal]
+
+  - id: lsta.extraction.low_confidence
+    check: min_confidence
+    params: {threshold: 0.7}
+    severity: info
+    confidence: 0.6
+    title: Low extraction confidence
+    explanation: The {field_label} value "{raw}" was extracted with confidence {confidence} (below {threshold}); please verify it against the source.
+    tags: [quality]
+
+cross_document_rules:
+  - id: lsta.xdoc.facility_amount
+    check: cross_doc_equal
+    field: notional_amount
+    params: {path: amount, tolerance: 0}
+    severity: critical
+    confidence: 0.95
+    title: Facility amount differs from related document
+    explanation: This document states {raw} but the related document states {related_raw}.
+    tags: [cross_document]
+
+  - id: lsta.xdoc.maturity
+    check: cross_doc_equal
+    field: maturity_date
+    params: {path: date}
+    severity: critical
+    confidence: 0.95
+    title: Maturity date differs from related document
+    explanation: This document states {raw} but the related document states {related_raw}.
+    tags: [cross_document]
+
+  - id: lsta.xdoc.margin
+    check: cross_doc_equal
+    field: margin
+    params: {path: rate_pct}
+    severity: error
+    confidence: 0.9
+    title: Margin differs from related document
+    explanation: This document states {raw} but the related document states {related_raw}.
+    tags: [cross_document]
+
+amendment_rules:
+  - id: lsta.amend.core_term_changed
+    check: amendment_changes
+    params: {mode: undeclared, fields: [notional_amount, maturity_date, effective_date, governing_law, counterparty, margin]}
+    severity: critical
+    confidence: 0.9
+    title: Undeclared change to a core term
+    explanation: The {field_label} changed from "{related_value}" to "{value}" but the amendment does not list it as amended.
+    tags: [amendment]
+
+  - id: lsta.amend.undeclared_change
+    check: amendment_changes
+    params: {mode: undeclared, exclude_fields: [notional_amount, maturity_date, effective_date, governing_law, counterparty, margin]}
+    severity: warning
+    confidence: 0.75
+    title: Change not listed as amended
+    explanation: The {field_label} changed from "{related_value}" to "{value}" but is not among the declared amendments.
+    tags: [amendment]
+
+  - id: lsta.amend.declared_unchanged
+    check: amendment_changes
+    params: {mode: declared_unchanged}
+    severity: info
+    confidence: 0.6
+    title: Declared amendment shows no change
+    explanation: The {field_label} was declared as amended but reads the same as the original ("{value}").
+    tags: [amendment]

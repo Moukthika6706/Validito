@@ -279,3 +279,148 @@ def role_conflict(rule: Rule, ctx: RuleContext) -> list[Finding]:
                     value_a=a.raw_text, role_a=a.get(role_path), value_b=b.raw_text, role_b=b.get(role_path),
                 ))
     return out
+
+
+# ----------------------------------------------------------------------------- Feature 5 checks
+
+
+def _scalar_key(e):
+    """Comparable summary of an entity's normalised value (None when unparsed)."""
+    nv = e.normalized_value or {}
+    if not nv:
+        return None
+    if "amount" in nv:
+        return ("amount", round(float(nv["amount"]), 2), nv.get("currency"))
+    if "date" in nv:
+        return ("date", nv["date"])
+    if "tenor" in nv:
+        return ("tenor", nv["tenor"].get("value"), nv["tenor"].get("unit"))
+    if nv.get("type") in ("fixed", "floating", "spread"):
+        return ("rate", nv.get("type"), nv.get("rate_pct"), nv.get("benchmark"), nv.get("spread_bps"))
+    if "jurisdiction" in nv:
+        return ("law", nv["jurisdiction"])
+    if "key" in nv:
+        return ("party", nv["key"])
+    if "pair" in nv and "rate" not in nv:
+        return ("pair", nv["pair"])
+    if "rate" in nv:
+        return ("fx", round(float(nv["rate"]), 6))
+    if "convention" in nv:
+        return ("dc", nv["convention"])
+    if "frequency" in nv:
+        return ("freq", nv.get("per_year"))
+    if "currency" in nv and len(nv) == 1:
+        return ("ccy", nv["currency"])
+    if "type" in nv:
+        return ("type", nv["type"])
+    if "text" in nv:
+        return ("text", re.sub(r"\s+", " ", str(nv["text"])).strip().lower())
+    return ("raw", str(sorted(nv.items())))
+
+
+def _field_key(doc, entity_type):
+    """Set of scalar keys for a field (multi-valued fields like counterparty compare as sets)."""
+    keys = {_scalar_key(e) for e in doc.of_type(entity_type)}
+    keys.discard(None)
+    return frozenset(keys)
+
+
+def _display(doc, entity_type) -> str:
+    items = doc.of_type(entity_type)
+    return "; ".join(sorted(e.raw_text for e in items)) if items else "—"
+
+
+@check("amendment_changes")
+def amendment_changes(rule: Rule, ctx: RuleContext) -> list[Finding]:
+    """Compare fields with the document this one amends.
+
+    params.mode = 'undeclared' (default): flag fields whose value changed but were not listed
+    in the amendment's declared `amended_fields`; 'declared_unchanged': flag declared fields
+    that did not actually change. params.fields limits the comparison (default: every field
+    present in both documents); params.exclude_fields removes some.
+    """
+    base = ctx.amendment_of
+    if base is None:
+        return []
+    mode = rule.params.get("mode", "undeclared")
+    declared = set(ctx.declared_amendments or [])
+    fields = rule.params.get("fields")
+    if not fields:
+        fields = sorted({e.entity_type for e in ctx.document.entities} & {e.entity_type for e in base.entities})
+    fields = [f for f in fields if f not in set(rule.params.get("exclude_fields", []))]
+    out = []
+    for f_ in fields:
+        new_key, old_key = _field_key(ctx.document, f_), _field_key(base, f_)
+        if not new_key or not old_key:
+            continue  # cannot compare unparsed / absent values
+        changed = new_key != old_key
+        if mode == "undeclared" and changed and f_ not in declared:
+            entity = ctx.document.first(f_)
+            fd = finding(
+                rule, ctx, entity=entity,
+                evidence={"field": f_, "value": _display(ctx.document, f_), "related_value": _display(base, f_),
+                          "related_document_id": base.id, "declared_amendments": sorted(declared), "declared": False},
+                field_label=f_.replace("_", " "), value=_display(ctx.document, f_), related_value=_display(base, f_),
+            )
+            fd.source = "cross_doc"
+            out.append(fd)
+        elif mode == "declared_unchanged" and not changed and f_ in declared:
+            entity = ctx.document.first(f_)
+            fd = finding(
+                rule, ctx, entity=entity,
+                evidence={"field": f_, "value": _display(ctx.document, f_), "related_value": _display(base, f_),
+                          "related_document_id": base.id, "declared": True},
+                field_label=f_.replace("_", " "), value=_display(ctx.document, f_),
+            )
+            fd.source = "cross_doc"
+            out.append(fd)
+    return out
+
+
+@check("relative_difference")
+def relative_difference(rule: Rule, ctx: RuleContext) -> list[Finding]:
+    """|a - b| / |b| must not exceed params.max_pct (a = field/path, b = other_field/other_path)."""
+    f_ = _field(rule)
+    a = ctx.document.first_with(f_, rule.params.get("path"))
+    b = ctx.document.first_with(rule.params["other_field"], rule.params.get("other_path"))
+    if not a or not b:
+        return []
+    va, vb = a.get(rule.params.get("path")), b.get(rule.params.get("other_path"))
+    if not isinstance(va, (int, float)) or not isinstance(vb, (int, float)) or vb == 0:
+        return []
+    pct = abs(va - vb) / abs(vb) * 100
+    limit = float(rule.params.get("max_pct", 10))
+    if pct <= limit:
+        return []
+    return [finding(rule, ctx, entity=a, evidence={"value": va, "other_value": vb, "difference_pct": round(pct, 3), "max_pct": limit},
+                    value=va, other_value=vb, pct=round(pct, 2), max=limit, other_field=rule.params["other_field"].replace("_", " "))]
+
+
+@check("conditional_presence")
+def conditional_presence(rule: Rule, ctx: RuleContext) -> list[Finding]:
+    """When params.when_field/when_path equals params.equals, params.require_field must be present."""
+    trigger = ctx.document.first_with(rule.params["when_field"], rule.params.get("when_path"))
+    if trigger is None or trigger.get(rule.params.get("when_path")) != rule.params.get("equals"):
+        return []
+    required = rule.params["require_field"]
+    if ctx.document.of_type(required):
+        return []
+    return [finding(rule, ctx, entity=trigger, evidence={"condition": {"field": rule.params["when_field"], "equals": rule.params.get("equals")}, "missing": required},
+                    field_label=required.replace("_", " "), condition_value=trigger.raw_text)]
+
+
+@check("value_in_other")
+def value_in_other(rule: Rule, ctx: RuleContext) -> list[Finding]:
+    """Value at field/path must equal one of the values at other_field/other_paths."""
+    f_ = _field(rule)
+    a = ctx.document.first_with(f_, rule.params.get("path"))
+    b = ctx.document.first(rule.params["other_field"])
+    if not a or not b:
+        return []
+    va = a.get(rule.params.get("path"))
+    allowed = [b.get(p) for p in rule.params.get("other_paths", [])]
+    allowed = [x for x in allowed if x is not None]
+    if va is None or not allowed or va in allowed:
+        return []
+    return [finding(rule, ctx, entity=a, evidence={"value": va, "allowed": allowed, "other_field": rule.params["other_field"]},
+                    value=va, allowed=", ".join(map(str, allowed)), other_field=rule.params["other_field"].replace("_", " "))]

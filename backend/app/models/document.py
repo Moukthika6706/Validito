@@ -1,6 +1,6 @@
 from datetime import datetime, timedelta, timezone
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String, Text
+from sqlalchemy import JSON, Boolean, DateTime, ForeignKey, Integer, String, Text
 from sqlalchemy.dialects.mysql import LONGTEXT
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -32,6 +32,10 @@ class Document(TimestampMixin, Base):
     related_document_id: Mapped[int | None] = mapped_column(
         ForeignKey("documents.id"), nullable=True
     )
+    # Amendment link: this document amends `amendment_of`; `amended_fields` lists the entity
+    # types the uploader declared as changed, so undeclared changes can be flagged.
+    amendment_of_id: Mapped[int | None] = mapped_column(ForeignKey("documents.id"), nullable=True)
+    amended_fields: Mapped[list[str] | None] = mapped_column(JSON, nullable=True)
 
     raw_text: Mapped[str | None] = mapped_column(
         Text().with_variant(LONGTEXT, "mysql"), nullable=True
@@ -56,6 +60,7 @@ class Document(TimestampMixin, Base):
     owner = relationship("User", back_populates="documents", foreign_keys=[owner_id])
     claimed_by = relationship("User", foreign_keys=[claimed_by_id])
     related_document = relationship("Document", remote_side=[id], foreign_keys=[related_document_id])
+    amendment_of = relationship("Document", remote_side=[id], foreign_keys=[amendment_of_id])
     entities = relationship(
         "ExtractedEntity", back_populates="document", cascade="all, delete-orphan"
     )

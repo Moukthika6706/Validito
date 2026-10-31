@@ -130,7 +130,8 @@ def run_validation(db: Session, document: Document, *, mark_failed: bool = True)
     record(
         db, event_type=events.VALIDATION_STARTED, target_type="validation_run", target_id=run.id, document_id=document.id,
         payload={"rule_pack": pack.key, "rule_pack_version": pack.version, "ml_model_version": MODEL_VERSION,
-                 "related_document_id": document.related_document_id},
+                 "related_document_id": document.related_document_id, "amendment_of_id": document.amendment_of_id,
+                 "declared_amendments": document.amended_fields},
     )
     db.commit()
 
@@ -156,7 +157,11 @@ def _validate(db: Session, document: Document, pack: RulePackConfig, run: Valida
     if document.related_document is not None and document.related_document.entities:
         related_view = to_view(document.related_document)
 
-    engine_result = evaluate(pack, RuleContext(document=view, related=related_view))
+    amendment_view = None
+    if document.amendment_of is not None and document.amendment_of.entities:
+        amendment_view = to_view(document.amendment_of)
+    engine_result = evaluate(pack, RuleContext(document=view, related=related_view, amendment_of=amendment_view,
+                                               declared_amendments=list(document.amended_fields or [])))
     findings = list(engine_result.findings)
     ml = ml_finding(pack, view)
     if ml:
