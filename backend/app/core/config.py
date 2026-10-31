@@ -48,6 +48,9 @@ class Settings(BaseSettings):
     # Routing
     auto_approve_confidence: float = 0.85
 
+    # How long a reviewer's claim on a document lasts without a refresh.
+    review_claim_ttl_minutes: int = 30
+
     # Demo convenience: let sign-up choose a role. Disable in production (admins assign roles).
     allow_self_role_selection: bool = True
 

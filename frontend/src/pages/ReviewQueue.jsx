@@ -43,6 +43,8 @@ export default function ReviewQueue() {
     { key: 'max_severity', label: 'Max severity', sortValue: (r) => SEV_RANK[r.max_severity] ?? -1, render: (r) => (r.max_severity ? <SeverityPill severity={r.max_severity} /> : '—'), width: 130 },
     { key: 'open_flags', label: 'Open flags', sortValue: (r) => r.open_flags, align: 'right', width: 100 },
     { key: 'routing_reason', label: 'Why it is here', render: (r) => <span className="small muted">{r.routing_reason}</span> },
+    { key: 'claimed_by_name', label: 'Reviewer', sortValue: (r) => r.claimed_by_name || '', width: 130,
+      render: (r) => (r.claimed_by_name ? <span className="pill pill-info" title={`until ${new Date(r.claim_expires_at).toLocaleTimeString()}`}>{r.claimed_by_name}</span> : <span className="muted small">unclaimed</span>) },
     { key: 'status', label: 'Status', render: (r) => <StatusPill status={r.status} />, width: 130 },
     { key: 'waiting_since', label: 'Waiting', sortValue: (r) => r.waiting_since, render: (r) => <span className="muted nowrap">{fmtRelative(r.waiting_since)}</span>, width: 100 },
   ]

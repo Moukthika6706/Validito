@@ -17,9 +17,10 @@ const PIPELINE = ['uploaded', 'processing', 'extracted', 'validated', 'decided']
 export default function ReviewDocument() {
   const { id } = useParams()
   const navigate = useNavigate()
-  const { isReviewer } = useAuth()
+  const { isReviewer, user } = useAuth()
   const [params, setParams] = useSearchParams()
   const [notice, setNotice] = useState(null)
+  const [lockedBy, setLockedBy] = useState(null) // { name, until } when another reviewer holds the claim
   const [docTab, setDocTab] = useState('original')
   const [focusEntity, setFocusEntity] = useState(null)
 
@@ -28,6 +29,29 @@ export default function ReviewDocument() {
   const status = doc.data?.status
   const flags = useAsync(() => (status && !IN_FLIGHT.has(status) ? documents.flags(id) : Promise.resolve(null)), [id, status])
   const text = useAsync(() => (status && !IN_FLIGHT.has(status) ? documents.text(id) : Promise.resolve(null)), [id, status])
+
+  // Reviewers take the review lock when they open a decided document and keep it fresh
+  // while the tab is open; a 409 means someone else is already on it.
+  const claimable = isReviewer && status && ['needs_review', 'auto_approved', 'reviewed'].includes(status)
+  useEffect(() => {
+    if (!claimable) return undefined
+    let cancelled = false
+    const tryClaim = async () => {
+      try {
+        await review.claim(id)
+        if (!cancelled) setLockedBy(null)
+      } catch (e) {
+        if (!cancelled && e.status === 409) setLockedBy({ name: e.body?.detail?.claimed_by_name || 'another reviewer', until: e.body?.detail?.claim_expires_at })
+      }
+    }
+    tryClaim()
+    const timer = setInterval(tryClaim, 5 * 60 * 1000)
+    return () => {
+      cancelled = true
+      clearInterval(timer)
+    }
+  }, [id, claimable])
+  const canAct = isReviewer && !lockedBy
 
   const expandedId = Number(params.get('flag')) || null
   const setExpanded = (fid) => setParams(fid ? { flag: fid } : {}, { replace: true })
@@ -47,7 +71,12 @@ export default function ReviewDocument() {
   }, [open.length])
 
   const onAct = async (flag, payload) => {
-    await review.act(flag.id, payload)
+    try {
+      await review.act(flag.id, payload)
+    } catch (e) {
+      if (e.status === 409 && e.body?.detail?.claimed_by_name) setLockedBy({ name: e.body.detail.claimed_by_name, until: e.body.detail.claim_expires_at })
+      throw e
+    }
     setNotice({ tone: 'ok', text: { accept: 'Flag confirmed and recorded.', reject: 'Rejected as a false positive — this feeds back into future confidence for the rule.', override: 'Override saved.' }[payload.action] })
     const fresh = await flags.reload(true)
     const nextOpen = (fresh || []).filter((f) => f.status === 'open')
@@ -79,7 +108,7 @@ export default function ReviewDocument() {
               Re-validate
             </Button>
           )}
-          {isReviewer && !inFlight && <CompleteReview document={d} openCount={open.length} onDone={() => navigate('/queue')} />}
+          {isReviewer && !inFlight && !lockedBy && <CompleteReview document={d} openCount={open.length} onDone={() => navigate('/queue')} />}
         </div>
       </div>
 
@@ -96,6 +125,16 @@ export default function ReviewDocument() {
           <GlowBackground position="corner" soft />
           <div className="above">
             {notice && <Notice tone={notice.tone}>{notice.text}</Notice>}
+            {lockedBy && (
+              <Notice tone="warn">
+                <span>
+                  <strong>{lockedBy.name}</strong> is reviewing this document{lockedBy.until ? ` (claim expires ${new Date(lockedBy.until).toLocaleTimeString()})` : ''}. You can read it, but actions are disabled until they finish or the claim expires.
+                </span>
+              </Notice>
+            )}
+            {!lockedBy && isReviewer && d.claimed_by_id === user.id && d.status === 'needs_review' && (
+              <p className="micro muted" style={{ marginBottom: 12 }}>You hold the review lock on this document; other reviewers see it as claimed.</p>
+            )}
             {inFlight && <ProcessingState status={d.status} />}
             {d.status === 'failed' && <Notice tone="bad">Processing failed: {d.error_message || 'unknown error'}. Fix the file or re-process.</Notice>}
             {d.status === 'auto_approved' && (
@@ -120,7 +159,7 @@ export default function ReviewDocument() {
                 )}
                 <div className="clause-list">
                   {open.map((f) => (
-                    <ClauseCard key={f.id} flag={f} expanded={expandedId === f.id} onToggle={() => setExpanded(expandedId === f.id ? null : f.id)} canAct={isReviewer} onAct={onAct} onFocusEntity={(e) => { setFocusEntity(e); setDocTab('text') }} />
+                    <ClauseCard key={f.id} flag={f} expanded={expandedId === f.id} onToggle={() => setExpanded(expandedId === f.id ? null : f.id)} canAct={canAct} onAct={onAct} onFocusEntity={(e) => { setFocusEntity(e); setDocTab('text') }} />
                   ))}
                 </div>
 
@@ -132,7 +171,7 @@ export default function ReviewDocument() {
                     </div>
                     <div className="clause-list">
                       {resolved.map((f) => (
-                        <ClauseCard key={f.id} flag={f} muted expanded={expandedId === f.id} onToggle={() => setExpanded(expandedId === f.id ? null : f.id)} canAct={isReviewer} onAct={onAct} onFocusEntity={(e) => { setFocusEntity(e); setDocTab('text') }} />
+                        <ClauseCard key={f.id} flag={f} muted expanded={expandedId === f.id} onToggle={() => setExpanded(expandedId === f.id ? null : f.id)} canAct={canAct} onAct={onAct} onFocusEntity={(e) => { setFocusEntity(e); setDocTab('text') }} />
                       ))}
                     </div>
                   </>

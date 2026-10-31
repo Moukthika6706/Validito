@@ -30,3 +30,18 @@ class AuditLog(TimestampMixin, Base):
 
     prev_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
     hash: Mapped[str] = mapped_column(String(64), nullable=False)
+
+
+class AuditChainHead(Base):
+    """Single-row table holding the hash of the newest audit entry.
+
+    Writers lock this row (SELECT ... FOR UPDATE) before appending, which serialises
+    concurrent recorders (API workers, Celery workers) so no two entries can claim the
+    same predecessor and fork the chain.
+    """
+
+    __tablename__ = "audit_chain_head"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, default=1)
+    last_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    last_entry_id: Mapped[int | None] = mapped_column(Integer, nullable=True)

@@ -1,4 +1,4 @@
-import { api } from './client'
+import { api, request } from './client'
 
 const V1 = '/api/v1'
 
@@ -37,6 +37,8 @@ export const validation = {
 
 export const review = {
   queue: (params) => api.get(`${V1}/review/queue`, params),
+  claim: (documentId) => api.post(`${V1}/review/documents/${documentId}/claim`),
+  release: (documentId) => request(`${V1}/review/documents/${documentId}/claim`, { method: 'DELETE' }),
   act: (flagId, payload) => api.post(`${V1}/review/flags/${flagId}/actions`, payload),
   complete: (documentId, payload) => api.post(`${V1}/review/documents/${documentId}/complete`, payload),
 }

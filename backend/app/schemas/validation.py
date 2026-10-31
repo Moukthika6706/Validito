@@ -95,3 +95,6 @@ class ReviewQueueItem(ORMModel):
     min_confidence: float | None
     routing_reason: str | None
     overall_score: float | None
+    claimed_by_id: int | None = None
+    claimed_by_name: str | None = None
+    claim_expires_at: datetime | None = None

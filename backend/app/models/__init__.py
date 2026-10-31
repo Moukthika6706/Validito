@@ -1,6 +1,6 @@
 """ORM models. Import this package to register every table on `Base.metadata`."""
 
-from app.models.audit import AuditLog
+from app.models.audit import AuditChainHead, AuditLog
 from app.models.document import Document
 from app.models.entity import ExtractedEntity
 from app.models.enums import (
@@ -20,6 +20,7 @@ from app.models.user import User
 from app.models.validation import Flag, ReviewActionRecord, ValidationRun
 
 __all__ = [
+    "AuditChainHead",
     "AuditLog",
     "Document",
     "DocumentStatus",

@@ -34,6 +34,10 @@ class DocumentOut(ORMModel):
     ocr_used: bool
     error_message: str | None
     review_outcome: str | None = None
+    claimed_by_id: int | None = None
+    claimed_by_name: str | None = None
+    claimed_at: datetime | None = None
+    claim_expires_at: datetime | None = None
     created_at: datetime
     updated_at: datetime
 

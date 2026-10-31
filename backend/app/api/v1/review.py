@@ -17,7 +17,29 @@ def queue(limit: int = Query(25, ge=1, le=200), offset: int = Query(0, ge=0), us
     return Page(items=items, total=total, limit=limit, offset=offset)
 
 
-@router.post("/flags/{flag_id}/actions", response_model=FlagDetail, summary="Accept, reject or override a flag")
+@router.post(
+    "/documents/{document_id}/claim",
+    response_model=DocumentOut,
+    summary="Claim (or refresh) the review lock on a document",
+    responses={409: {"description": "Another reviewer holds an unexpired claim; detail carries who and until when."}},
+)
+def claim(document_id: int, user: User = ReviewerOrAdmin, db: Session = DB):
+    document = document_service.get_document_or_404(db, document_id, user)
+    return review_service.claim_document(db, document, user)
+
+
+@router.delete("/documents/{document_id}/claim", response_model=DocumentOut, summary="Release your claim (admins may release anyone's)")
+def release(document_id: int, user: User = ReviewerOrAdmin, db: Session = DB):
+    document = document_service.get_document_or_404(db, document_id, user)
+    return review_service.release_claim(db, document, user)
+
+
+@router.post(
+    "/flags/{flag_id}/actions",
+    response_model=FlagDetail,
+    summary="Accept, reject or override a flag",
+    responses={409: {"description": "Document is claimed by another reviewer."}},
+)
 def act(flag_id: int, data: ReviewActionIn, user: User = ReviewerOrAdmin, db: Session = DB):
     flag = review_service.get_flag_or_404(db, flag_id)
     flag = review_service.act_on_flag(db, flag, user, data)

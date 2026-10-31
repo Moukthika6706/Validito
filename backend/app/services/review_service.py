@@ -7,7 +7,8 @@ from sqlalchemy.orm import Session, selectinload
 
 from app.audit import events, record
 from app.explainability import confidence_band, describe_source
-from app.models import Document, DocumentStatus, Flag, FlagStatus, ReviewAction, ReviewActionRecord, User, ValidationRun
+from app.models import Document, DocumentStatus, Flag, FlagStatus, ReviewAction, ReviewActionRecord, User, UserRole, ValidationRun
+from app.models.base import utcnow
 from app.schemas.validation import ReviewActionIn, ReviewCompleteIn
 
 log = logging.getLogger(__name__)
@@ -50,16 +51,79 @@ def list_flags(db: Session, document_id: int, *, status_filter: FlagStatus | Non
     return sorted(rows, key=lambda f: (-f.severity.rank, f.confidence, f.id))
 
 
+# --------------------------------------------------------------------------- claims
+
+
+def _claim_conflict(document: Document) -> HTTPException:
+    return HTTPException(
+        status.HTTP_409_CONFLICT,
+        detail={
+            "message": f"Document is being reviewed by {document.claimed_by_name or 'another reviewer'}.",
+            "claimed_by_id": document.claimed_by_id,
+            "claimed_by_name": document.claimed_by_name,
+            "claim_expires_at": document.claim_expires_at.isoformat() if document.claim_expires_at else None,
+        },
+    )
+
+
+def claim_document(db: Session, document: Document, reviewer: User) -> Document:
+    """Take (or refresh) the review lock. Conflicts if another reviewer holds an unexpired claim."""
+    # Lock the row so two reviewers clicking at once cannot both succeed.
+    document = db.execute(select(Document).where(Document.id == document.id).with_for_update()).scalar_one()
+    if document.claim_active and document.claimed_by_id != reviewer.id:
+        db.rollback()
+        raise _claim_conflict(document)
+    takeover_from = document.claimed_by_id if (document.claimed_by_id and document.claimed_by_id != reviewer.id) else None
+    refreshed = document.claimed_by_id == reviewer.id and document.claim_active
+    document.claimed_by_id = reviewer.id
+    document.claimed_at = utcnow()
+    if not refreshed:
+        record(
+            db, event_type=events.REVIEW_CLAIMED, target_type="document", target_id=document.id, document_id=document.id, actor_id=reviewer.id,
+            payload={"expires_at": document.claim_expires_at.isoformat(), "took_over_expired_claim_from": takeover_from},
+        )
+    db.commit()
+    db.refresh(document)
+    return document
+
+
+def release_claim(db: Session, document: Document, user: User, *, reason: str = "released") -> Document:
+    if document.claimed_by_id is None:
+        return document
+    if document.claimed_by_id != user.id and user.role != UserRole.admin:
+        raise _claim_conflict(document)
+    record(
+        db, event_type=events.REVIEW_RELEASED, target_type="document", target_id=document.id, document_id=document.id, actor_id=user.id,
+        payload={"released_from": document.claimed_by_id, "reason": reason},
+    )
+    document.claimed_by_id = None
+    document.claimed_at = None
+    db.commit()
+    return document
+
+
+def ensure_claim(db: Session, document: Document, reviewer: User) -> None:
+    """Called before any review write: auto-claim when free, conflict when held by another."""
+    if document.claim_active and document.claimed_by_id != reviewer.id:
+        raise _claim_conflict(document)
+    if not (document.claim_active and document.claimed_by_id == reviewer.id):
+        claim_document(db, document, reviewer)
+
+
+# --------------------------------------------------------------------------- queue
+
+
 def review_queue(db: Session, *, limit: int, offset: int) -> tuple[list[dict[str, Any]], int]:
     base = select(Document).where(Document.status == DocumentStatus.needs_review)
     total = db.execute(select(func.count()).select_from(base.subquery())).scalar_one()
     docs = db.execute(
-        base.options(selectinload(Document.owner)).order_by(Document.updated_at.asc()).limit(limit).offset(offset)
+        base.options(selectinload(Document.owner), selectinload(Document.claimed_by)).order_by(Document.updated_at.asc()).limit(limit).offset(offset)
     ).scalars().all()
     items = []
     for d in docs:
         open_flags = [f for f in db.execute(select(Flag).where(Flag.document_id == d.id, Flag.status == FlagStatus.open)).scalars()]
         run = db.execute(select(ValidationRun).where(ValidationRun.document_id == d.id).order_by(ValidationRun.id.desc()).limit(1)).scalar_one_or_none()
+        active = d.claim_active
         items.append({
             "document_id": d.id,
             "original_filename": d.original_filename,
@@ -74,8 +138,14 @@ def review_queue(db: Session, *, limit: int, offset: int) -> tuple[list[dict[str
             "min_confidence": min((f.confidence for f in open_flags), default=None),
             "routing_reason": run.routing_reason if run else None,
             "overall_score": run.overall_score if run else None,
+            "claimed_by_id": d.claimed_by_id if active else None,
+            "claimed_by_name": d.claimed_by_name if active else None,
+            "claim_expires_at": d.claim_expires_at if active else None,
         })
     return items, total
+
+
+# --------------------------------------------------------------------------- actions
 
 
 def act_on_flag(db: Session, flag: Flag, reviewer: User, data: ReviewActionIn) -> Flag:
@@ -83,6 +153,7 @@ def act_on_flag(db: Session, flag: Flag, reviewer: User, data: ReviewActionIn) -
         raise HTTPException(status.HTTP_409_CONFLICT, f"Flag is '{flag.status.value}' and can no longer be reviewed.")
     if data.action == ReviewAction.override and data.override_value is None:
         raise HTTPException(422, "An override must include 'override_value'.")
+    ensure_claim(db, flag.document, reviewer)
 
     action = ReviewActionRecord(
         flag_id=flag.id, reviewer_id=reviewer.id, action=data.action, comment=data.comment, override_value=data.override_value
@@ -105,6 +176,7 @@ def act_on_flag(db: Session, flag: Flag, reviewer: User, data: ReviewActionIn) -
 def complete_review(db: Session, document: Document, reviewer: User, data: ReviewCompleteIn) -> Document:
     if document.status not in (DocumentStatus.needs_review, DocumentStatus.auto_approved, DocumentStatus.reviewed):
         raise HTTPException(status.HTTP_409_CONFLICT, f"Document is '{document.status.value}'; only decided documents can be reviewed.")
+    ensure_claim(db, document, reviewer)
     open_flags = db.execute(select(Flag).where(Flag.document_id == document.id, Flag.status == FlagStatus.open)).scalars().all()
     if open_flags:
         if data.resolve_remaining is None:
@@ -123,4 +195,5 @@ def complete_review(db: Session, document: Document, reviewer: User, data: Revie
         payload={"from": previous.value, "to": DocumentStatus.reviewed.value, "outcome": data.outcome, "comment": data.comment, "reason": "review_completed"},
     )
     db.commit()
+    release_claim(db, document, reviewer, reason="review_completed")
     return document

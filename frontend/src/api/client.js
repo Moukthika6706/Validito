@@ -32,6 +32,7 @@ function formatDetail(body) {
     // Pydantic validation errors
     return body.detail.map((d) => `${(d.loc || []).slice(1).join('.')}: ${d.msg}`).join('; ')
   }
+  if (body.detail && typeof body.detail === 'object' && body.detail.message) return body.detail.message
   return null
 }
 
