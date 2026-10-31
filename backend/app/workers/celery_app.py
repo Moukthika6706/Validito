@@ -29,6 +29,7 @@ celery_app.conf.update(
     task_routes={
         "app.workers.tasks.extract_document": {"queue": "extraction"},
         "app.workers.tasks.validate_document": {"queue": "validation"},
+        "app.workers.tasks.send_notification": {"queue": "notifications"},
     },
     task_default_queue="default",
 )

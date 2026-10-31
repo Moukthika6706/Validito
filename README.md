@@ -55,7 +55,7 @@ alembic upgrade head
 python scripts/make_samples.py                        # demo term sheets into ../samples
 python scripts/seed.py --samples                      # demo users, rule packs, processed samples
 uvicorn app.main:app --reload --port 8000
-celery -A app.workers.celery_app worker -Q extraction,validation,default --loglevel=info
+celery -A app.workers.celery_app worker -Q extraction,validation,notifications,default --loglevel=info
 ```
 
 No MySQL / Redis to hand? Put this in `backend/.env` and everything runs in-process on SQLite:
@@ -221,6 +221,23 @@ Full interactive docs at `/docs`.
 A new pack is a new YAML file with its own `key`; it is seeded on the next boot and selectable at
 upload (or auto-detected from its `applies_to` keywords). Admins can also edit rules from the UI —
 each edit cuts a new pack version, and flags keep the snapshot of the version that raised them.
+
+## Notifications
+
+Optional and **off by default**. When a document is routed to the review queue, or any flag
+reaches `NOTIFY_SEVERITY_THRESHOLD` (default `error`), the validation stage enqueues a
+`send_notification` task on the Celery `notifications` queue. Channels:
+
+| Channel | Enable | Settings |
+|---|---|---|
+| Email (SMTP) | `NOTIFY_EMAIL_ENABLED=true` | `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASSWORD`, `SMTP_STARTTLS`, `NOTIFY_EMAIL_FROM`, `NOTIFY_EMAIL_TO` (comma-separated) |
+| Slack | `NOTIFY_SLACK_ENABLED=true` | `SLACK_WEBHOOK_URL` (incoming webhook) |
+
+Messages carry the document name, a severity summary, the top three flags with confidence,
+and a deep link built from `FRONTEND_BASE_URL`. `NOTIFY_DEDUPE_PER_DOCUMENT=true` (default)
+notifies about a document at most once, using the audit log as the ledger. Delivery retries
+with backoff; every success is audited as `notification.sent` and every failure as
+`notification.failed` — a dead SMTP server or webhook can never fail a document.
 
 ## Security notes
 

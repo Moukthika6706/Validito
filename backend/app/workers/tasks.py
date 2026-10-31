@@ -85,6 +85,48 @@ def validate_document(self, document_id: int) -> int:
     return _run_stage(self, document_id, DocumentStatus.validating, run_validation)
 
 
+@celery_app.task(name="app.workers.tasks.send_notification", bind=True, max_retries=MAX_RETRIES, acks_late=True)
+def send_notification(self, document_id: int, run_id: int, kinds: list[str]) -> dict:
+    """Deliver one notification through every enabled channel. Retries with backoff on
+    channel errors; channels already recorded as sent for this run are not re-sent. Never
+    raises except to retry, so a dead SMTP server can never fail a document."""
+    from sqlalchemy import select
+
+    from app.core.config import get_settings
+    from app.models import Flag, FlagStatus, ValidationRun
+    from app.notifications.channels import ChannelError, enabled_channels
+    from app.notifications.service import already_notified, build_message
+
+    settings = get_settings()
+    outcome: dict = {"sent": [], "failed": [], "skipped": []}
+    with session_scope() as db:
+        document = db.get(Document, document_id)
+        run = db.get(ValidationRun, run_id)
+        if document is None or run is None:
+            return outcome
+        flags = db.execute(select(Flag).where(Flag.validation_run_id == run_id, Flag.status != FlagStatus.superseded)).scalars().all()
+        message = build_message(document, run, flags, kinds, settings)
+        for channel in enabled_channels(settings):
+            if already_notified(db, document_id, channel=channel.name, run_id=run_id):
+                outcome["skipped"].append(channel.name)
+                continue
+            try:
+                detail = channel.send(message)
+            except ChannelError as exc:
+                outcome["failed"].append(channel.name)
+                record(db, event_type=events.NOTIFICATION_FAILED, target_type="document", target_id=document_id, document_id=document_id,
+                       payload={"channel": channel.name, "kinds": kinds, "run_id": run_id, "attempt": self.request.retries + 1, "error": str(exc)[:500]})
+                log.warning("notification via %s failed for document %s: %s", channel.name, document_id, exc)
+                continue
+            outcome["sent"].append(channel.name)
+            record(db, event_type=events.NOTIFICATION_SENT, target_type="document", target_id=document_id, document_id=document_id,
+                   payload={"channel": channel.name, "kinds": kinds, "run_id": run_id, "subject": message.subject[:200], **detail})
+        db.commit()
+    if outcome["failed"] and self.request.retries < MAX_RETRIES and not self.request.is_eager:
+        raise self.retry(countdown=_backoff(self.request.retries))
+    return outcome
+
+
 def enqueue_processing(document_id: int):
     """Extraction then validation. Returns the AsyncResult of the chain."""
     return chain(extract_document.s(document_id), validate_document.s()).apply_async()

@@ -16,6 +16,7 @@ from app.explainability import summarize_flags
 from app.extraction.pipeline import set_status
 from app.ml import MODEL_VERSION, get_model
 from app.ml.feedback import calibrate, rule_stats
+from app.notifications import enqueue_for_run
 from app.models import Document, DocumentStatus, Flag, FlagSource, FlagStatus, RoutingDecision, RunStatus, Severity, ValidationRun
 from app.models.base import utcnow
 from app.rules import DocumentView, EntityView, Finding, RuleContext, RulePackConfig, active_pack, detect_pack_key, evaluate, rule_snapshot
@@ -201,4 +202,5 @@ def _validate(db: Session, document: Document, pack: RulePackConfig, run: Valida
     document.error_message = None
     set_status(db, document, new_status, run_id=run.id, decision=routing.decision.value)
     db.commit()
+    enqueue_for_run(db, document, run, flags, routing.decision)
     return ValidationOutcome(run=run, flags=flags, decision=routing.decision, reason=routing.reason, score=routing.score, summary=summary)

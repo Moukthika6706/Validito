@@ -48,6 +48,22 @@ class Settings(BaseSettings):
     # Routing
     auto_approve_confidence: float = 0.85
 
+    # --- Notifications (all channels OFF by default; failures never affect the pipeline) ---
+    frontend_base_url: str = "http://localhost:5173"  # deep links in notifications
+    notify_severity_threshold: str = "error"  # info | warning | error | critical
+    notify_dedupe_per_document: bool = True  # notify about a document at most once
+    notify_timeout_seconds: float = 10.0
+    notify_email_enabled: bool = False
+    smtp_host: str = ""
+    smtp_port: int = 587
+    smtp_user: str = ""
+    smtp_password: str = ""
+    smtp_starttls: bool = True
+    notify_email_from: str = "validito@localhost"
+    notify_email_to: str = ""  # comma-separated
+    notify_slack_enabled: bool = False
+    slack_webhook_url: str = ""
+
     # How long a reviewer's claim on a document lasts without a refresh.
     review_claim_ttl_minutes: int = 30
 

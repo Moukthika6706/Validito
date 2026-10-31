@@ -30,7 +30,7 @@ case "$1" in
     exec celery -A app.workers.celery_app worker \
       --loglevel=info \
       --concurrency="${CELERY_CONCURRENCY:-2}" \
-      -Q "${CELERY_QUEUES:-extraction,validation,default}"
+      -Q "${CELERY_QUEUES:-extraction,validation,notifications,default}"
     ;;
   *)
     exec "$@"
