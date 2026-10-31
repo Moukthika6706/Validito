@@ -280,3 +280,16 @@ details[open] > summary::before { content: '▾ '; }
 .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: var(--s-4); }
 .grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--s-4); }
 @media (max-width: 1000px) { .grid-2, .grid-3 { grid-template-columns: 1fr; } .review-panes { grid-template-columns: 1fr; } .pane-doc { display: none; } }
+
+/* ------------------------------------------------------------------ page viewer (Feature 2) */
+.pages { padding: var(--s-5); display: flex; flex-direction: column; gap: var(--s-4); align-items: center; }
+.page-frame { position: relative; width: min(100%, 860px); background: #fff; box-shadow: var(--shadow-card); border-radius: 4px; overflow: hidden; }
+.page-frame img { display: block; width: 100%; height: 100%; user-select: none; }
+.page-skeleton { position: absolute; inset: 0; background: linear-gradient(90deg, rgba(28,25,23,.04), rgba(28,25,23,.09), rgba(28,25,23,.04)); background-size: 200% 100%; animation: shimmer 1.4s infinite; }
+.page-num { position: absolute; right: 10px; bottom: 8px; font-size: 11px; color: var(--ink-3); background: rgba(255,255,255,.8); padding: 2px 6px; border-radius: 999px; }
+.hl { position: absolute; border: 2px solid var(--hl); background: color-mix(in srgb, var(--hl) 18%, transparent); border-radius: 3px; padding: 0; cursor: pointer; transition: background .15s; box-sizing: content-box; margin: -3px; }
+.hl:hover { background: color-mix(in srgb, var(--hl) 30%, transparent); }
+.hl-active { animation: hl-pulse 1.2s ease-out 2; box-shadow: 0 0 0 4px color-mix(in srgb, var(--hl) 35%, transparent); z-index: 2; }
+@keyframes hl-pulse { 0% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--hl) 60%, transparent); } 100% { box-shadow: 0 0 0 14px transparent; } }
+.hl-legend { display: flex; gap: 10px; align-items: center; font-size: 11px; color: var(--ink-3); padding: 0 var(--s-5) 8px; }
+.hl-legend i { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 4px; vertical-align: -1px; }

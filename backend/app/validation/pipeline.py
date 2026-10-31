@@ -46,7 +46,7 @@ def to_view(document: Document) -> DocumentView:
         entities=[
             EntityView(
                 id=e.id, entity_type=e.entity_type, raw_text=e.raw_text,
-                normalized_value=e.normalized_value, confidence=e.confidence, page=e.page,
+                normalized_value=e.normalized_value, confidence=e.confidence, page=e.page, bbox=e.bbox,
             )
             for e in document.entities
         ],

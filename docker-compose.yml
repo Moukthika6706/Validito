@@ -37,7 +37,10 @@ services:
       retries: 10
 
   api:
-    build: ./backend
+    build:
+      context: ./backend
+      args:
+        INSTALL_LIBREOFFICE: ${INSTALL_LIBREOFFICE:-false}
     command: api
     environment: &backend_env
       APP_ENV: ${APP_ENV:-development}

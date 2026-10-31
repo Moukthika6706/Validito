@@ -1,7 +1,7 @@
 from typing import Annotated
 
 from fastapi import APIRouter, File, Form, Query, UploadFile
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, Response
 from sqlalchemy.orm import Session
 
 from app.ingestion.storage import absolute_path
@@ -9,7 +9,9 @@ from app.ingestion.storage import absolute_path
 from app.api.deps import DB, CurrentUser
 from app.models import DocumentStatus, DocumentType, User
 from app.schemas.common import Page
-from app.schemas.document import BulkUploadResult, DocumentDetail, DocumentLink, DocumentOut, DocumentStatusOut, DocumentTextOut, EntityOut
+from app.schemas.document import BulkUploadResult, DocumentDetail, DocumentLink, DocumentOut, DocumentStatusOut, DocumentTextOut, EntityOut, PagesOut
+from app.services import render_service
+from app.audit import events, record
 from app.services import document_service as svc
 
 router = APIRouter(prefix="/documents", tags=["documents"])
@@ -105,6 +107,28 @@ def get_file(document_id: int, user: User = CurrentUser, db: Session = DB):
     document = svc.get_document_or_404(db, document_id, user)
     return FileResponse(absolute_path(document.storage_path), media_type=document.mime_type, filename=document.original_filename,
                         content_disposition_type="inline")
+
+
+@router.get("/{document_id}/pages", response_model=PagesOut, summary="Page geometry and whether the original can be rendered")
+def pages(document_id: int, user: User = CurrentUser, db: Session = DB):
+    document = svc.get_document_or_404(db, document_id, user)
+    return render_service.pages_info(document)
+
+
+@router.get(
+    "/{document_id}/pages/{number}.png",
+    summary="Render one page as PNG (for the review overlay)",
+    responses={200: {"content": {"image/png": {}}}, 404: {"description": "No such page, or the file type cannot be rendered"}},
+)
+def page_png(document_id: int, number: int, dpi: int = Query(render_service.DEFAULT_DPI, ge=36, le=render_service.MAX_DPI), user: User = CurrentUser, db: Session = DB):
+    document = svc.get_document_or_404(db, document_id, user)
+    png = render_service.render_page_png(document, number, dpi)
+    if number == 1:
+        # One event per document view rather than per page keeps the trail readable.
+        record(db, event_type=events.DOCUMENT_RENDERED, target_type="document", target_id=document.id, document_id=document.id,
+               actor_id=user.id, payload={"dpi": dpi, "source": render_service.render_source(document)[0]})
+        db.commit()
+    return Response(content=png, media_type="image/png", headers={"Cache-Control": "private, max-age=300"})
 
 
 @router.post("/{document_id}/reprocess", response_model=DocumentOut, status_code=202, summary="Re-run extraction + validation")

@@ -20,6 +20,9 @@ class PageText:
     text: str
     ocr: bool = False
     ocr_confidence: float | None = None
+    width: float | None = None  # page size in the coordinate space of `ocr_lines`
+    height: float | None = None
+    ocr_lines: list = field(default_factory=list)  # [(line_text, (x0, y0, x1, y1))] in page pixels
 
 
 @dataclass
@@ -65,13 +68,14 @@ def _extract_pdf(path: Path, *, ocr_enabled: bool) -> ExtractedText:
         for index, page in enumerate(doc, start=1):
             text = page.get_text("text") or ""
             if len(text.strip()) >= MIN_TEXT_CHARS_PER_PAGE or not ocr_enabled:
-                result.pages.append(PageText(number=index, text=text))
+                result.pages.append(PageText(number=index, text=text, width=page.rect.width, height=page.rect.height))
                 continue
             log.info("Page %s of %s has little text; running OCR", index, path.name)
             pix = page.get_pixmap(dpi=OCR_RENDER_DPI)
             ocr = get_ocr_engine().read(pix.tobytes("png"))
             result.pages.append(
-                PageText(number=index, text=ocr.text, ocr=True, ocr_confidence=ocr.confidence)
+                PageText(number=index, text=ocr.text, ocr=True, ocr_confidence=ocr.confidence,
+                         width=pix.width, height=pix.height, ocr_lines=[(l.text, l.bbox) for l in ocr.lines])
             )
     return result
 
@@ -98,7 +102,12 @@ def _extract_docx(path: Path) -> ExtractedText:
 
 
 def _extract_image(path: Path) -> ExtractedText:
+    import pymupdf as fitz
+
     ocr = get_ocr_engine().read(path.read_bytes())
+    with fitz.open(path) as img:
+        width, height = img[0].rect.width, img[0].rect.height
     return ExtractedText(
-        pages=[PageText(number=1, text=ocr.text, ocr=True, ocr_confidence=ocr.confidence)]
+        pages=[PageText(number=1, text=ocr.text, ocr=True, ocr_confidence=ocr.confidence,
+                        width=width, height=height, ocr_lines=[(l.text, l.bbox) for l in ocr.lines])]
     )

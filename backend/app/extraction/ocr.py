@@ -3,7 +3,7 @@ pulls in torch; text-based PDFs and DOCX files never need it."""
 
 import logging
 import threading
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from app.core.config import get_settings
 
@@ -15,10 +15,17 @@ class OCRUnavailableError(RuntimeError):
 
 
 @dataclass
+class OCRLine:
+    text: str
+    bbox: tuple[float, float, float, float]  # x0, y0, x1, y1 in image pixels
+
+
+@dataclass
 class OCRResult:
     text: str
     confidence: float  # mean per-line confidence, 0..1
     line_count: int
+    lines: list[OCRLine] = field(default_factory=list)
 
 
 class OCREngine:
@@ -46,30 +53,41 @@ class OCREngine:
         reader = self._get_reader()
         # readtext returns [(bbox, text, confidence), ...] in reading order.
         results = reader.readtext(image_bytes, detail=1, paragraph=False)
-        lines = _group_into_lines(results)
+        grouped = _group_into_lines(results)
+        lines = [g[0] for g in grouped]
         text = "\n".join(lines)
         confs = [float(r[2]) for r in results] or [0.0]
-        return OCRResult(text=text, confidence=sum(confs) / len(confs), line_count=len(lines))
+        return OCRResult(
+            text=text, confidence=sum(confs) / len(confs), line_count=len(lines),
+            lines=[OCRLine(text=t, bbox=b) for t, b in grouped],
+        )
 
 
-def _group_into_lines(results, y_tolerance: float = 12.0) -> list[str]:
-    """Merge boxes that share a baseline into a single line, left-to-right.
-    This keeps 'Label: Value' pairs on one line, which the field extractor relies on."""
+def _group_into_lines(results, y_tolerance: float = 12.0) -> list[tuple[str, tuple[float, float, float, float]]]:
+    """Merge boxes that share a baseline into a single line, left-to-right, returning
+    (line_text, union_bbox). Keeping 'Label: Value' pairs on one line is what the field
+    extractor relies on; the union box is the provenance for anything found on that line."""
     items = []
     for bbox, text, _conf in results:
         ys = [p[1] for p in bbox]
         xs = [p[0] for p in bbox]
-        items.append(((min(ys) + max(ys)) / 2, min(xs), text))
+        items.append(((min(ys) + max(ys)) / 2, min(xs), text, (min(xs), min(ys), max(xs), max(ys))))
     items.sort(key=lambda t: (t[0], t[1]))
 
-    lines: list[list[tuple[float, str]]] = []
+    lines: list[list[tuple[float, str, tuple]]] = []
     current_y: float | None = None
-    for y, x, text in items:
+    for y, x, text, box in items:
         if current_y is None or abs(y - current_y) > y_tolerance:
             lines.append([])
             current_y = y
-        lines[-1].append((x, text))
-    return [" ".join(t for _, t in sorted(line)) for line in lines]
+        lines[-1].append((x, text, box))
+    out = []
+    for line in lines:
+        line.sort(key=lambda t: t[0])
+        boxes = [b for _, _, b in line]
+        union = (min(b[0] for b in boxes), min(b[1] for b in boxes), max(b[2] for b in boxes), max(b[3] for b in boxes))
+        out.append((" ".join(t for _, t, _ in line), union))
+    return out
 
 
 _engine: OCREngine | None = None

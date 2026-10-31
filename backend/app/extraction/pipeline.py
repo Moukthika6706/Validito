@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 
 from app.audit import events, record
 from app.extraction.ner import extract_entities
+from app.extraction.provenance import locate_boxes
 from app.extraction.text import extract_text
 from app.ingestion.storage import absolute_path
 from app.models import Document, DocumentStatus, ExtractedEntity
@@ -37,8 +38,10 @@ def run_extraction(db: Session, document: Document, *, mark_failed: bool = True)
     db.commit()
 
     try:
-        extracted = extract_text(absolute_path(document.storage_path), document.mime_type)
+        path = absolute_path(document.storage_path)
+        extracted = extract_text(path, document.mime_type)
         candidates = extract_entities(extracted)
+        locate_boxes(path, document.mime_type, extracted, candidates)
     except Exception as exc:  # noqa: BLE001
         log.exception("Extraction failed for document %s", document.id)
         document.error_message = f"{type(exc).__name__}: {exc}"[:2000]
@@ -78,6 +81,7 @@ def run_extraction(db: Session, document: Document, *, mark_failed: bool = True)
             page=c.page,
             char_start=c.char_start,
             char_end=c.char_end,
+            bbox=c.bbox,
         )
         db.add(entity)
         entities.append(entity)
@@ -97,6 +101,7 @@ def run_extraction(db: Session, document: Document, *, mark_failed: bool = True)
                 "confidence": entity.confidence,
                 "extractor": entity.extractor.value,
                 "page": entity.page,
+                "bbox": entity.bbox,
             },
         )
     record(

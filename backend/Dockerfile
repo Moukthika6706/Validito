@@ -7,8 +7,12 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PIP_NO_CACHE_DIR=1
 
 # libgl / glib for OpenCV (pulled in by EasyOCR); netcat for the DB wait loop
+# INSTALL_LIBREOFFICE=true adds LibreOffice (~400 MB) so DOCX uploads render as pages in the
+# review screen; without it DOCX falls back to highlighting within the extracted text.
+ARG INSTALL_LIBREOFFICE=false
 RUN apt-get update && apt-get install -y --no-install-recommends \
         libgl1 libglib2.0-0 netcat-openbsd curl \
+    && if [ "$INSTALL_LIBREOFFICE" = "true" ]; then apt-get install -y --no-install-recommends libreoffice-writer; fi \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app

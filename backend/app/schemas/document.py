@@ -17,6 +17,22 @@ class EntityOut(ORMModel):
     page: int | None
     char_start: int | None
     char_end: int | None
+    bbox: list[dict[str, Any]] | None = None
+
+
+class PageInfo(BaseModel):
+    number: int
+    width: float
+    height: float
+
+
+class PagesOut(BaseModel):
+    document_id: int
+    renderable: bool
+    render_source: str | None = Field(default=None, description="pdf | image | libreoffice | null when no page render is possible (e.g. DOCX without LibreOffice)")
+    page_count: int
+    pages: list[PageInfo]
+    note: str | None = None
 
 
 class DocumentOut(ORMModel):

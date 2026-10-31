@@ -38,6 +38,7 @@ class EntityCandidate:
     page: int | None = None
     char_start: int | None = None
     char_end: int | None = None
+    bbox: list[dict[str, Any]] | None = None  # filled by extraction.provenance
     meta: dict[str, Any] = field(default_factory=dict)
 
 

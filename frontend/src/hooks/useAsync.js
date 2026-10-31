@@ -31,10 +31,11 @@ export function useAsync(loader, deps = [], { interval, shouldPoll } = {}) {
 
   useEffect(() => {
     if (!interval) return undefined
+    if (state.error && !state.data) return undefined // a hard error should not turn into a hot loop
     if (shouldPoll && !shouldPoll(state.data)) return undefined
     const id = setInterval(() => run(true), interval)
     return () => clearInterval(id)
-  }, [interval, shouldPoll, state.data, run])
+  }, [interval, shouldPoll, state.data, state.error, run])
 
   return { ...state, reload: run }
 }

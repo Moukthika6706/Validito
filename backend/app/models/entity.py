@@ -25,5 +25,8 @@ class ExtractedEntity(TimestampMixin, Base):
     page: Mapped[int | None] = mapped_column(Integer, nullable=True)
     char_start: Mapped[int | None] = mapped_column(Integer, nullable=True)
     char_end: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    # Provenance: rectangles on the source page as fractions of page width/height
+    # [{"page": 1, "x0": .., "y0": .., "x1": .., "y1": ..}, ...]; None when unlocatable (DOCX).
+    bbox: Mapped[list[dict[str, Any]] | None] = mapped_column(JSON, nullable=True)
 
     document = relationship("Document", back_populates="entities")

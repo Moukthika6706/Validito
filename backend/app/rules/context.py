@@ -12,6 +12,7 @@ class EntityView:
     normalized_value: dict[str, Any] | None
     confidence: float
     page: int | None = None
+    bbox: list[dict[str, Any]] | None = None
 
     def get(self, path: str | None) -> Any:
         """Dotted-path lookup into the normalized value; None if unset."""

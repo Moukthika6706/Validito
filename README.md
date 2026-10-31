@@ -116,8 +116,9 @@ cd backend && python -m pytest -q      # 83 tests: normalisers, extraction, rule
    severities live in the rule pack. The dashboard reports **% auto-approved / manual review
    reduction** from `GET /api/v1/metrics/summary`.
 
-6. **Review.** Reviewers see the extracted clause side by side with the rule that fired, the
-   evidence and the confidence, and accept / reject / override with a comment. Rejections feed
+6. **Review.** Reviewers see the original page with each flagged clause outlined where it
+   sits in the document (colour-coded by severity; click a flag to jump to it, click an
+   outline to open the flag), next to the rule that fired, the evidence and the confidence, and accept / reject / override with a comment. Rejections feed
    back: a rule reviewers keep rejecting loses confidence and drifts into the "ask a human"
    band instead of blocking approvals.
 
@@ -189,7 +190,7 @@ Full interactive docs at `/docs`.
 | Area | Endpoints |
 |---|---|
 | Auth | `POST /auth/register`, `POST /auth/login`, `GET /auth/me` |
-| Documents | `POST /documents` (upload, 202), `POST /documents/bulk` (many files, per-file accept/reject), `GET /documents/status?ids=` (poll-friendly), `GET /documents`, `GET /documents/{id}`, `/text`, `/entities`, `/file`, `/flags`, `/runs`, `POST /{id}/reprocess`, `POST /{id}/validate`, `PUT /{id}/link` |
+| Documents | `POST /documents` (upload, 202), `POST /documents/bulk` (many files, per-file accept/reject), `GET /documents/status?ids=` (poll-friendly), `GET /documents`, `GET /documents/{id}`, `/text`, `/entities` (with `bbox` provenance), `/file`, `/pages`, `/pages/{n}.png` (rendered page for the overlay), `/flags`, `/runs`, `POST /{id}/reprocess`, `POST /{id}/validate`, `PUT /{id}/link` |
 | Validation | `GET /validation/runs/{id}`, `GET /flags/{id}` |
 | Review (reviewer+) | `GET /review/queue`, `POST`/`DELETE /review/documents/{id}/claim` (soft lock, `409` if held by someone else), `POST /review/flags/{id}/actions`, `POST /review/documents/{id}/complete` |
 | Audit | `GET /audit`, `GET /audit/documents/{id}`, `GET /audit/event-types`, `GET /audit/verify` (admin) |

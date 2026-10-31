@@ -4,6 +4,7 @@ import { documents, review } from '../api/endpoints'
 import Button from '../components/Button'
 import ClauseCard from '../components/ClauseCard'
 import GlowBackground from '../components/GlowBackground'
+import PageViewer from '../components/PageViewer'
 import { EmptyState, ErrorState, Field, Loading, Notice } from '../components/States'
 import { StatusPill } from '../components/StatusPill'
 import { useAuth } from '../context/AuthContext'
@@ -23,6 +24,7 @@ export default function ReviewDocument() {
   const [lockedBy, setLockedBy] = useState(null) // { name, until } when another reviewer holds the claim
   const [docTab, setDocTab] = useState('original')
   const [focusEntity, setFocusEntity] = useState(null)
+  const [renderNote, setRenderNote] = useState(null) // set when the original cannot be rendered (e.g. DOCX)
 
   const shouldPoll = useCallback((d) => !d || IN_FLIGHT.has(d.status), [])
   const doc = useAsync(() => documents.get(id), [id], { interval: 2500, shouldPoll })
@@ -55,6 +57,16 @@ export default function ReviewDocument() {
 
   const expandedId = Number(params.get('flag')) || null
   const setExpanded = (fid) => setParams(fid ? { flag: fid } : {}, { replace: true })
+
+  // Overlay rectangles: one per flag whose entity carries provenance boxes.
+  const highlights = useMemo(
+    () =>
+      (flags.data || [])
+        .filter((f) => f.status !== 'superseded' && f.entity?.bbox?.length)
+        .map((f) => ({ id: `flag-${f.id}`, flagId: f.id, severity: f.severity, boxes: f.entity.bbox, label: `${f.severity}: ${f.title}` })),
+    [flags.data],
+  )
+  const activeHighlight = expandedId ? `flag-${expandedId}` : null
 
   const { open, resolved, cleanEntities } = useMemo(() => {
     const all = (flags.data || []).filter((f) => f.status !== 'superseded')
@@ -115,10 +127,29 @@ export default function ReviewDocument() {
       <div className="review-panes">
         <div className="pane pane-doc">
           <div className="pane-tabs">
-            <button className={docTab === 'original' ? 'active' : ''} onClick={() => setDocTab('original')}>Original</button>
+            <button className={docTab === 'original' ? 'active' : ''} onClick={() => setDocTab('original')} disabled={!!renderNote}>Original</button>
             <button className={docTab === 'text' ? 'active' : ''} onClick={() => setDocTab('text')}>Extracted text</button>
           </div>
-          {docTab === 'original' ? <OriginalPane document={d} onFallback={() => setDocTab('text')} /> : <TextPane text={text.data?.raw_text} entities={d.entities} focus={focusEntity} />}
+          {renderNote && <Notice tone="info"><span className="small">{renderNote}</span></Notice>}
+          {docTab === 'original' && !renderNote && highlights.length > 0 && (
+            <div className="hl-legend">
+              <span>Flagged spans:</span>
+              {['critical', 'error', 'warning', 'info'].map((s) => (
+                <span key={s}><i style={{ background: { critical: 'var(--crit)', error: 'var(--bad)', warning: 'var(--warn)', info: 'var(--info)' }[s] }} />{s}</span>
+              ))}
+            </div>
+          )}
+          {docTab === 'original' && !renderNote ? (
+            <PageViewer
+              documentId={d.id}
+              highlights={highlights}
+              activeId={activeHighlight}
+              onSelect={(fid) => setExpanded(fid)}
+              onUnrenderable={(note) => { setRenderNote(note || 'No page render available; highlights are shown in the extracted text.'); setDocTab('text') }}
+            />
+          ) : (
+            <TextPane text={text.data?.raw_text} entities={d.entities} focus={focusEntity} />
+          )}
         </div>
 
         <div className="pane pane-flags">

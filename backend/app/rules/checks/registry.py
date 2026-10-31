@@ -76,6 +76,7 @@ def finding(rule: Rule, ctx: RuleContext, *, entity: EntityView | None = None, e
         ev["entity"] = {
             "id": entity.id, "type": entity.entity_type, "raw_text": entity.raw_text,
             "normalized_value": entity.normalized_value, "confidence": entity.confidence, "page": entity.page,
+            "bbox": entity.bbox,
         }
     ev.update(evidence or {})
     return Finding(
