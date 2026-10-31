@@ -222,6 +222,20 @@ A new pack is a new YAML file with its own `key`; it is seeded on the next boot 
 upload (or auto-detected from its `applies_to` keywords). Admins can also edit rules from the UI —
 each edit cuts a new pack version, and flags keep the snapshot of the version that raised them.
 
+## LLM-assisted extraction fallback
+
+Optional and **off by default**. With `LLM_FALLBACK_ENABLED=true` and `ANTHROPIC_API_KEY` set,
+extraction asks Claude (`LLM_MODEL`, default `claude-opus-5-5`) to propose values only for
+required fields the label extractor and NER failed to find, sending just the leading
+`LLM_MAX_INPUT_CHARS` of text and requiring a strict JSON structure. A proposal is kept only if
+its value appears verbatim in the document; it is then normalised like any other hit, stored
+with `extractor=llm` and `LLM_CONFIDENCE` (0.45), and shown with an **AI-proposed** badge.
+Validation adds an `extraction.llm_proposed` warning per such field whose low confidence
+routes the document to human review through the normal policy. The attempt is audited as
+`extraction.llm_fallback` (model, field names, counts, latency — never document text or
+keys); timeouts, API errors and refusals are logged and the pipeline continues without the
+fallback.
+
 ## Notifications
 
 Optional and **off by default**. When a document is routed to the review queue, or any flag

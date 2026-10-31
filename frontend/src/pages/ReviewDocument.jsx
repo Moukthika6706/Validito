@@ -6,7 +6,7 @@ import ClauseCard from '../components/ClauseCard'
 import GlowBackground from '../components/GlowBackground'
 import PageViewer from '../components/PageViewer'
 import { EmptyState, ErrorState, Field, Loading, Notice } from '../components/States'
-import { StatusPill } from '../components/StatusPill'
+import { AIProposedPill, StatusPill } from '../components/StatusPill'
 import { tokenStore } from '../api/client'
 import { useAuth } from '../context/AuthContext'
 import { useAsync } from '../hooks/useAsync'
@@ -220,7 +220,7 @@ export default function ReviewDocument() {
                   <div className="clean-list">
                     {cleanEntities.map((e) => (
                       <div className="clean-item" key={e.id} onClick={() => { setFocusEntity(e); setDocTab('text') }} style={{ cursor: 'pointer' }}>
-                        <strong>{humanize(e.entity_type)}</strong>
+                        <strong>{humanize(e.entity_type)} {e.extractor === 'llm' && <AIProposedPill />}</strong>
                         <span>{e.normalized_value ? fmtNormalized(e.normalized_value) : e.raw_text}</span>
                       </div>
                     ))}

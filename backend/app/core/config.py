@@ -64,6 +64,16 @@ class Settings(BaseSettings):
     notify_slack_enabled: bool = False
     slack_webhook_url: str = ""
 
+    # --- LLM-assisted extraction fallback (OFF by default) ---
+    # Asks Claude for required fields the label extractor and NER missed; proposals are
+    # verified against the document text and stored with a low confidence as source "llm".
+    llm_fallback_enabled: bool = False
+    anthropic_api_key: str = ""
+    llm_model: str = "claude-opus-5-5"
+    llm_timeout_seconds: float = 20.0
+    llm_max_input_chars: int = 12000  # only the leading text is sent
+    llm_confidence: float = 0.45  # deliberately below the review threshold
+
     # How long a reviewer's claim on a document lasts without a refresh.
     review_claim_ttl_minutes: int = 30
 

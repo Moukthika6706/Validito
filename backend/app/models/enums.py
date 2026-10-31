@@ -45,6 +45,7 @@ class Extractor(str, enum.Enum):
     spacy_ner = "spacy_ner"
     entity_ruler = "entity_ruler"
     regex = "regex"
+    llm = "llm"  # proposed by the LLM fallback and verified against the text
 
 
 class RunStatus(str, enum.Enum):

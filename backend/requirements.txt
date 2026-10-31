@@ -33,6 +33,9 @@ pandas>=2.2
 numpy>=1.26
 joblib>=1.4
 
+# --- LLM fallback (optional at runtime; OFF unless LLM_FALLBACK_ENABLED=true) ---
+anthropic>=0.80
+
 # --- Reports ---
 reportlab>=4.0
 

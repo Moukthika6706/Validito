@@ -39,6 +39,14 @@ export function SourcePill({ source }) {
   return <span className="pill pill-plain">{label}</span>
 }
 
+export function AIProposedPill() {
+  return (
+    <span className="pill pill-info" title="Proposed by the LLM fallback because no deterministic extractor found this field. The value was verified to appear in the document text, but a human must confirm it.">
+      AI-proposed
+    </span>
+  )
+}
+
 export function RolePill({ role }) {
   return <span className="pill pill-plain">{role}</span>
 }

@@ -6,10 +6,11 @@ from sqlalchemy.orm import Session
 
 from app.audit import events, record
 from app.extraction.ner import extract_entities
+from app.extraction.llm_fallback import is_configured, missing_required_fields, propose_missing_fields
 from app.extraction.provenance import locate_boxes
 from app.extraction.text import extract_text
 from app.ingestion.storage import absolute_path
-from app.models import Document, DocumentStatus, ExtractedEntity
+from app.models import Document, DocumentStatus, ExtractedEntity, Extractor
 
 log = logging.getLogger(__name__)
 
@@ -41,6 +42,12 @@ def run_extraction(db: Session, document: Document, *, mark_failed: bool = True)
         path = absolute_path(document.storage_path)
         extracted = extract_text(path, document.mime_type)
         candidates = extract_entities(extracted)
+        llm_result = None
+        if is_configured():
+            missing = missing_required_fields({c.entity_type for c in candidates})
+            if missing:
+                llm_result = propose_missing_fields(extracted, missing)
+                candidates.extend(llm_result.candidates)
         locate_boxes(path, document.mime_type, extracted, candidates)
     except Exception as exc:  # noqa: BLE001
         log.exception("Extraction failed for document %s", document.id)
@@ -104,6 +111,15 @@ def run_extraction(db: Session, document: Document, *, mark_failed: bool = True)
                 "bbox": entity.bbox,
             },
         )
+    if llm_result is not None and llm_result.attempted:
+        record(
+            db,
+            event_type=events.EXTRACTION_LLM_FALLBACK,
+            target_type="document",
+            target_id=document.id,
+            document_id=document.id,
+            payload=llm_result.audit_payload(),
+        )
     record(
         db,
         event_type=events.EXTRACTION_COMPLETED,
@@ -115,6 +131,7 @@ def run_extraction(db: Session, document: Document, *, mark_failed: bool = True)
             "page_count": extracted.page_count,
             "ocr_used": extracted.ocr_used,
             "entity_types": sorted({e.entity_type for e in entities}),
+            "llm_proposed_fields": sorted({e.entity_type for e in entities if e.extractor == Extractor.llm}),
         },
     )
     set_status(db, document, DocumentStatus.extracted, entity_count=len(entities))

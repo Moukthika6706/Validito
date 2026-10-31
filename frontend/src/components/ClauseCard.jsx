@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { fmtDate, fmtNormalized, humanize } from '../utils/format'
 import Button from './Button'
 import ConfidenceMeter from './ConfidenceMeter'
-import { FlagStatusPill, SeverityPill, SourcePill } from './StatusPill'
+import { AIProposedPill, FlagStatusPill, SeverityPill, SourcePill } from './StatusPill'
 import { Field, JsonDetails, Notice } from './States'
 
 /**
@@ -50,6 +50,7 @@ export default function ClauseCard({ flag, expanded, onToggle, canAct, onAct, on
           <div className="row" style={{ gap: 6 }}>
             <SeverityPill severity={flag.severity} />
             <SourcePill source={flag.source} />
+            {entity?.extractor === 'llm' && <AIProposedPill />}
             {flag.status !== 'open' && <FlagStatusPill status={flag.status} />}
           </div>
           <div className="clause-title">{flag.title}</div>

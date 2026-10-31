@@ -17,7 +17,7 @@ from app.extraction.pipeline import set_status
 from app.ml import MODEL_VERSION, get_model
 from app.ml.feedback import calibrate, rule_stats
 from app.notifications import enqueue_for_run
-from app.models import Document, DocumentStatus, Flag, FlagSource, FlagStatus, RoutingDecision, RunStatus, Severity, ValidationRun
+from app.models import Document, DocumentStatus, Extractor, Flag, FlagSource, FlagStatus, RoutingDecision, RunStatus, Severity, ValidationRun
 from app.models.base import utcnow
 from app.rules import DocumentView, EntityView, Finding, RuleContext, RulePackConfig, active_pack, detect_pack_key, evaluate, rule_snapshot
 from app.validation.routing import decide
@@ -25,6 +25,7 @@ from app.validation.routing import decide
 log = logging.getLogger(__name__)
 
 ML_RULE_ID = "ml.anomaly"
+LLM_RULE_ID = "extraction.llm_proposed"
 
 
 @dataclass
@@ -89,6 +90,33 @@ def ml_finding(pack: RulePackConfig, view: DocumentView) -> Finding | None:
     )
 
 
+def llm_findings(document: Document) -> list[Finding]:
+    """One warning per AI-proposed field. Confidence is the (low) LLM confidence, so the
+    routing policy's ambiguity rule routes the document to review rather than auto-approving
+    on a value no deterministic extractor confirmed."""
+    out: list[Finding] = []
+    for e in document.entities:
+        if e.extractor != Extractor.llm:
+            continue
+        model = (e.normalized_value or {}).get("_model") or "LLM"
+        out.append(Finding(
+            rule_id=LLM_RULE_ID,
+            check="llm_proposed",
+            severity=Severity.warning.value,
+            confidence=e.confidence,
+            title=f"AI-proposed value for {e.entity_type.replace('_', ' ')}",
+            explanation=(
+                f"The {e.entity_type.replace('_', ' ')} was not found by the label extractor or NER; the configured language model "
+                f"proposed \"{e.raw_text}\", which was verified to appear in the document text. Confirm it is the right clause before relying on it."
+            ),
+            evidence={"check": "llm_proposed", "entity": {"id": e.id, "type": e.entity_type, "raw_text": e.raw_text, "normalized_value": e.normalized_value,
+                                                           "confidence": e.confidence, "page": e.page, "bbox": e.bbox}, "extractor": "llm", "model": model},
+            entity_id=e.id,
+            source="ml",
+        ))
+    return out
+
+
 def run_validation(db: Session, document: Document, *, mark_failed: bool = True) -> ValidationOutcome:
     db.refresh(document)  # drop any stale relationship collections from the extraction stage
     if document.status in (DocumentStatus.queued, DocumentStatus.extracting) and not document.entities and not document.raw_text:
@@ -133,6 +161,7 @@ def _validate(db: Session, document: Document, pack: RulePackConfig, run: Valida
     ml = ml_finding(pack, view)
     if ml:
         findings.append(ml)
+    findings.extend(llm_findings(document))
 
     # Feedback loop: reviewer history re-calibrates confidence per rule.
     stats = rule_stats(db)
