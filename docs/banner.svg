@@ -38,22 +38,9 @@
 
   <!-- wordmark -->
   <g font-family="Archivo, 'Arial Narrow', 'Helvetica Neue', Arial, sans-serif" fill="#1c1917">
-    <text x="360" y="212" font-size="128" font-weight="800" letter-spacing="-5">Validito</text>
-    <text x="366" y="272" font-size="34" font-weight="500" fill="#57534e" font-family="Inter, 'Segoe UI', Arial, sans-serif">Term-sheet validation you can audit.</text>
-    <text x="366" y="318" font-size="22" fill="#8a8580" font-family="Inter, 'Segoe UI', Arial, sans-serif">Extract the clauses, run the rule packs, score the anomalies, explain every flag, route only the doubtful ones to a human.</text>
+    <text x="360" y="228" font-size="128" font-weight="800" letter-spacing="-5">Validito</text>
+    <text x="366" y="290" font-size="34" font-weight="500" fill="#57534e" font-family="Inter, 'Segoe UI', Arial, sans-serif">Term-sheet validation you can audit.</text>
+    <text x="366" y="338" font-size="22" fill="#8a8580" font-family="Inter, 'Segoe UI', Arial, sans-serif">Extract the clauses, run the rule packs, score the anomalies, explain every flag, route only the doubtful ones to a human.</text>
   </g>
 
-  <!-- pack pills -->
-  <g font-family="Inter, 'Segoe UI', Arial, sans-serif" font-size="20" font-weight="600" text-anchor="middle">
-    <rect x="366" y="352" width="92" height="40" rx="20" fill="#ffffff" stroke="#1c1917" stroke-opacity="0.12"/>
-    <text x="412" y="379" fill="#1c1917">ISDA</text>
-    <rect x="470" y="352" width="86" height="40" rx="20" fill="#ffffff" stroke="#1c1917" stroke-opacity="0.12"/>
-    <text x="513" y="379" fill="#1c1917">LMA</text>
-    <rect x="568" y="352" width="94" height="40" rx="20" fill="#ffffff" stroke="#1c1917" stroke-opacity="0.12"/>
-    <text x="615" y="379" fill="#1c1917">LSTA</text>
-    <rect x="674" y="352" width="156" height="40" rx="20" fill="#ffffff" stroke="#1c1917" stroke-opacity="0.12"/>
-    <text x="752" y="379" fill="#1c1917">FX forward</text>
-    <rect x="842" y="352" width="258" height="40" rx="20" fill="url(#b-accent)"/>
-    <text x="971" y="379" fill="#ffffff">Hash-chained audit log</text>
-  </g>
 </svg>
