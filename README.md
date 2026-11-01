@@ -41,6 +41,18 @@ processed sample documents on first boot.
 > First build downloads CPU PyTorch + EasyOCR models (~1 GB) so scanned documents work out of the box.
 > Set `SEED_DEMO_DATA=false` in the environment to boot with an empty database.
 
+## Deploy to AWS
+
+A single EC2 instance runs the whole stack with Docker Compose. Step-by-step instructions
+(IAM user, key pair, security group, instance, bootstrap script, `.env`, build, Elastic IP) are in
+[deploy/aws/RUNBOOK.md](deploy/aws/RUNBOOK.md); the production overlay is
+[docker-compose.prod.yml](docker-compose.prod.yml) and the env template
+[.env.production.example](.env.production.example).
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
+```
+
 ## Quick start (local, no Docker)
 
 Backend (Python 3.12):

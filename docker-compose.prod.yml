@@ -1,0 +1,44 @@
+# Production overlay for a single host (e.g. one EC2 instance).
+#
+#   docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
+#
+# Differences from the dev file:
+#   - MySQL and Redis are NOT published to the host (only reachable inside the compose network)
+#   - the frontend (nginx) listens on port 80; the API is reached through it at /api and /docs
+#   - the API port is not published either; nginx proxies to it
+#   - every service restarts automatically
+#   - settings come from a .env file next to this compose file (copy .env.production.example)
+
+services:
+  mysql:
+    ports: !override []
+    restart: unless-stopped
+
+  redis:
+    ports: !override []
+    restart: unless-stopped
+
+  api:
+    ports: !override []
+    restart: unless-stopped
+    environment:
+      APP_ENV: production
+      SECRET_KEY: ${SECRET_KEY:?set SECRET_KEY in .env (openssl rand -hex 32)}
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost}
+      FRONTEND_BASE_URL: ${FRONTEND_BASE_URL:-http://localhost}
+      ALLOW_SELF_ROLE_SELECTION: ${ALLOW_SELF_ROLE_SELECTION:-false}
+      SEED_DEMO_DATA: ${SEED_DEMO_DATA:-true}
+      SEED_SAMPLES: ${SEED_SAMPLES:-1}
+      UVICORN_EXTRA_ARGS: "--proxy-headers --forwarded-allow-ips=*"
+
+  worker:
+    restart: unless-stopped
+    environment:
+      APP_ENV: production
+      SECRET_KEY: ${SECRET_KEY:?set SECRET_KEY in .env (openssl rand -hex 32)}
+      FRONTEND_BASE_URL: ${FRONTEND_BASE_URL:-http://localhost}
+
+  frontend:
+    ports: !override
+      - "80:80"
+    restart: unless-stopped

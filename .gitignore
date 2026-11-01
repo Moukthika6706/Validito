@@ -39,3 +39,6 @@ backend/app/ml/artifacts/
 Thumbs.db
 *.db
 *.sqlite
+
+# Hallmark audit artefacts (local only)
+.hallmark/
