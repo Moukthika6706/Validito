@@ -1,0 +1,59 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 440" width="1600" height="440" role="img" aria-label="Validito: term-sheet validation you can audit">
+  <defs>
+    <linearGradient id="b-accent" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#ff8a3d"/>
+      <stop offset="1" stop-color="#f26b1d"/>
+    </linearGradient>
+    <radialGradient id="b-glow" cx="0.22" cy="0.1" r="0.75">
+      <stop offset="0" stop-color="#ffb26b" stop-opacity="0.95"/>
+      <stop offset="0.45" stop-color="#ffd7b5" stop-opacity="0.6"/>
+      <stop offset="1" stop-color="#f5f4f2" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="b-glow2" cx="0.92" cy="1" r="0.6">
+      <stop offset="0" stop-color="#ffd7b5" stop-opacity="0.8"/>
+      <stop offset="1" stop-color="#f5f4f2" stop-opacity="0"/>
+    </radialGradient>
+    <clipPath id="b-clip"><rect width="1600" height="440" rx="28"/></clipPath>
+  </defs>
+  <g clip-path="url(#b-clip)">
+    <rect width="1600" height="440" fill="#f5f4f2"/>
+    <rect width="1600" height="440" fill="url(#b-glow)"/>
+    <rect width="1600" height="440" fill="url(#b-glow2)"/>
+    <g stroke="#1c1917" stroke-opacity="0.05" stroke-width="1">
+      <path d="M0 110H1600M0 220H1600M0 330H1600"/>
+      <path d="M400 0V440M800 0V440M1200 0V440"/>
+    </g>
+  </g>
+  <rect x="0.5" y="0.5" width="1599" height="439" rx="28" fill="none" stroke="#1c1917" stroke-opacity="0.1"/>
+
+  <!-- mark -->
+  <g transform="translate(96 112) scale(1.8)">
+    <rect x="3" y="3" width="114" height="114" rx="28" fill="#faf9f7" stroke="#1c1917" stroke-opacity="0.1" stroke-width="2"/>
+    <path d="M38 28h28l18 18v44a6 6 0 0 1-6 6H38a6 6 0 0 1-6-6V34a6 6 0 0 1 6-6z" fill="#ffffff" stroke="#1c1917" stroke-width="3" stroke-linejoin="round"/>
+    <path d="M66 28v18h18" fill="none" stroke="#1c1917" stroke-width="3" stroke-linejoin="round"/>
+    <path d="M42 56h22M42 66h30M42 76h16" stroke="#8a8580" stroke-width="3" stroke-linecap="round"/>
+    <circle cx="80" cy="84" r="19" fill="url(#b-accent)" stroke="#faf9f7" stroke-width="3"/>
+    <path d="M70.5 84.5l6.5 6.5 13-14" fill="none" stroke="#ffffff" stroke-width="4.5" stroke-linecap="round" stroke-linejoin="round"/>
+  </g>
+
+  <!-- wordmark -->
+  <g font-family="Archivo, 'Arial Narrow', 'Helvetica Neue', Arial, sans-serif" fill="#1c1917">
+    <text x="360" y="212" font-size="128" font-weight="800" letter-spacing="-5">Validito</text>
+    <text x="366" y="272" font-size="34" font-weight="500" fill="#57534e" font-family="Inter, 'Segoe UI', Arial, sans-serif">Term-sheet validation you can audit.</text>
+    <text x="366" y="318" font-size="22" fill="#8a8580" font-family="Inter, 'Segoe UI', Arial, sans-serif">Extract the clauses, run the rule packs, score the anomalies, explain every flag, route only the doubtful ones to a human.</text>
+  </g>
+
+  <!-- pack pills -->
+  <g font-family="Inter, 'Segoe UI', Arial, sans-serif" font-size="20" font-weight="600" text-anchor="middle">
+    <rect x="366" y="352" width="92" height="40" rx="20" fill="#ffffff" stroke="#1c1917" stroke-opacity="0.12"/>
+    <text x="412" y="379" fill="#1c1917">ISDA</text>
+    <rect x="470" y="352" width="86" height="40" rx="20" fill="#ffffff" stroke="#1c1917" stroke-opacity="0.12"/>
+    <text x="513" y="379" fill="#1c1917">LMA</text>
+    <rect x="568" y="352" width="94" height="40" rx="20" fill="#ffffff" stroke="#1c1917" stroke-opacity="0.12"/>
+    <text x="615" y="379" fill="#1c1917">LSTA</text>
+    <rect x="674" y="352" width="156" height="40" rx="20" fill="#ffffff" stroke="#1c1917" stroke-opacity="0.12"/>
+    <text x="752" y="379" fill="#1c1917">FX forward</text>
+    <rect x="842" y="352" width="258" height="40" rx="20" fill="url(#b-accent)"/>
+    <text x="971" y="379" fill="#ffffff">Hash-chained audit log</text>
+  </g>
+</svg>
