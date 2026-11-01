@@ -1,0 +1,48 @@
+# Render Blueprint: one free web service (lite API image) + one free Postgres database.
+# Dashboard -> New -> Blueprint -> pick this repo. After the first deploy set CORS_ORIGINS
+# and FRONTEND_BASE_URL to your Vercel URL (Environment tab) and redeploy.
+services:
+  - type: web
+    name: validito-api
+    runtime: docker
+    plan: free
+    region: singapore          # closest free region to India; change to frankfurt/oregon if you prefer
+    dockerfilePath: ./backend/Dockerfile.lite
+    dockerContext: ./backend
+    dockerCommand: ./docker-entrypoint.sh api
+    healthCheckPath: /health
+    autoDeploy: true
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: validito-db
+          property: connectionString
+      - key: SECRET_KEY
+        generateValue: true
+      - key: APP_ENV
+        value: production
+      - key: CELERY_TASK_ALWAYS_EAGER      # no worker / Redis on the free tier: tasks run inline
+        value: "true"
+      - key: STORAGE_BACKEND               # uploads survive Render's ephemeral disk
+        value: db
+      - key: STORAGE_DIR
+        value: /tmp/validito-storage
+      - key: SEED_DEMO_DATA
+        value: "true"
+      - key: SEED_SAMPLES
+        value: "1"
+      - key: ALLOW_SELF_ROLE_SELECTION
+        value: "false"
+      - key: CORS_ORIGINS                  # replace with https://<your-app>.vercel.app after the Vercel deploy
+        value: http://localhost:5173
+      - key: FRONTEND_BASE_URL
+        value: http://localhost:5173
+      - key: UVICORN_EXTRA_ARGS
+        value: "--proxy-headers --forwarded-allow-ips=*"
+
+databases:
+  - name: validito-db
+    plan: free
+    region: singapore
+    databaseName: validito
+    user: validito

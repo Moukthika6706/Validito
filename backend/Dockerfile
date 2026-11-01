@@ -19,8 +19,8 @@ WORKDIR /app
 
 # CPU-only torch first so EasyOCR does not pull the multi-GB CUDA build.
 RUN pip install --index-url https://download.pytorch.org/whl/cpu torch torchvision
-COPY requirements.txt .
-RUN pip install -r requirements.txt \
+COPY requirements.txt requirements-ocr.txt .
+RUN pip install -r requirements.txt -r requirements-ocr.txt \
     && python -m spacy download en_core_web_sm
 
 # Pre-fetch the EasyOCR English models so the first scanned upload is not slow.

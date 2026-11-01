@@ -1,0 +1,2 @@
+# Optional OCR stack for scanned uploads. Install CPU-only torch first (see Dockerfile).
+easyocr>=1.7

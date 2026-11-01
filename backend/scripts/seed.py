@@ -108,8 +108,12 @@ def main() -> None:
         packs = seed_rule_packs(db, created_by=users["admin"].id)
         print(f"rule packs: {len(packs)} new version(s) seeded")
         if args.samples:
-            print("samples:")
-            seed_samples(db, users["analyst"])
+            from app.models import Document
+            if db.execute(select(Document.id).limit(1)).first():
+                print("samples: documents already exist, skipping")
+            else:
+                print("samples:")
+                seed_samples(db, users["analyst"])
     print("done")
 
 

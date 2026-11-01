@@ -16,6 +16,7 @@ from app.models.enums import (
     UserRole,
 )
 from app.models.rule_pack import RulePack
+from app.models.stored_file import StoredFile
 from app.models.user import User
 from app.models.validation import Flag, ReviewActionRecord, ValidationRun
 
@@ -36,6 +37,7 @@ __all__ = [
     "RulePack",
     "RunStatus",
     "Severity",
+    "StoredFile",
     "User",
     "UserRole",
     "ValidationRun",

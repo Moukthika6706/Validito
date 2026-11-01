@@ -37,6 +37,9 @@ class Settings(BaseSettings):
 
     # Storage
     storage_dir: Path = BACKEND_DIR / "storage"
+    # local | db. "db" also keeps uploads in the stored_files table so they survive hosts
+    # with an ephemeral filesystem; storage_dir then acts as a cache.
+    storage_backend: str = "local"
     max_upload_mb: int = 25
 
     # OCR / ML
@@ -84,7 +87,14 @@ class Settings(BaseSettings):
     @property
     def sqlalchemy_url(self) -> str:
         if self.database_url:
-            return self.database_url
+            url = self.database_url
+            # Managed Postgres (Render, Heroku, Supabase) hands out postgres:// or
+            # postgresql:// URLs; route both through the psycopg 3 driver.
+            if url.startswith("postgres://"):
+                url = "postgresql+psycopg://" + url[len("postgres://"):]
+            elif url.startswith("postgresql://"):
+                url = "postgresql+psycopg://" + url[len("postgresql://"):]
+            return url
         return (
             f"mysql+pymysql://{self.mysql_user}:{self.mysql_password}"
             f"@{self.mysql_host}:{self.mysql_port}/{self.mysql_db}?charset=utf8mb4"

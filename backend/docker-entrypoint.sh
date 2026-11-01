@@ -3,6 +3,8 @@
 set -e
 
 wait_for_db() {
+  # A full DATABASE_URL (managed Postgres, SQLite) needs no MySQL port probe.
+  case "${DATABASE_URL:-}" in "") ;; *) echo "using DATABASE_URL"; return 0;; esac
   host="${MYSQL_HOST:-mysql}"; port="${MYSQL_PORT:-3306}"
   echo "waiting for MySQL at $host:$port ..."
   for i in $(seq 1 60); do
@@ -21,7 +23,7 @@ case "$1" in
       python scripts/make_samples.py >/dev/null 2>&1 || true
       python scripts/seed.py ${SEED_SAMPLES:+--samples} || echo "seed skipped"
     fi
-    exec uvicorn app.main:app --host 0.0.0.0 --port 8000 ${UVICORN_EXTRA_ARGS}
+    exec uvicorn app.main:app --host 0.0.0.0 --port "${PORT:-8000}" ${UVICORN_EXTRA_ARGS}
     ;;
   worker)
     wait_for_db
