@@ -2,7 +2,7 @@
 fastapi>=0.115,<1.0
 uvicorn[standard]>=0.30
 python-multipart>=0.0.9
-pydantic>=2.7
+pydantic[email]>=2.7   # EmailStr needs email-validator
 pydantic-settings>=2.3
 
 # --- Database ---
