@@ -41,6 +41,15 @@ processed sample documents on first boot.
 > First build downloads CPU PyTorch + EasyOCR models (~1 GB) so scanned documents work out of the box.
 > Set `SEED_DEMO_DATA=false` in the environment to boot with an empty database.
 
+## Deploy for free (Render + Vercel)
+
+Live demo: _link added after deployment_.
+
+- API + Postgres on [Render](https://render.com) from `render.yaml` (lite image, no OCR, tasks run inline, uploads stored in Postgres).
+- Frontend on [Vercel](https://vercel.com) from `frontend/` with `VITE_API_URL` pointing at the Render URL.
+
+Step by step: [deploy/render-vercel/RUNBOOK.md](deploy/render-vercel/RUNBOOK.md).
+
 ## Deploy to AWS
 
 A single EC2 instance runs the whole stack with Docker Compose. Step-by-step instructions
