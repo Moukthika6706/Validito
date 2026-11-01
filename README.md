@@ -31,9 +31,13 @@
 
 ## 📌 Overview
 
-Validito is a working version of the **pre-trade document control** a bank's operations or legal team runs on a term sheet before a derivative or a loan is booked. A term sheet is the one- or two-page summary of a deal: parties, notional, dates, rates, governing law, settlement. Mistakes in it are expensive, and today they are caught by people reading PDFs.
+**Validito is a term-sheet validation tool that uses AI.** A term sheet is the short document that sums up a financial deal: who the parties are, how much money is involved, the dates, the interest rate, which law applies, and how the deal settles. Before a bank books a trade or a loan, someone has to read that document carefully and catch anything wrong or unusual. Today that is slow, manual work, and mistakes are expensive.
 
-An analyst uploads a term sheet (PDF, DOCX or a scanned image). Validito:
+Validito does the first read for you. It pulls the key terms out of the document, checks them against the standard conventions for that market, spots combinations that look unusual, explains every problem it finds in plain words, and only asks a human to look at the documents that need judgement. Every step it takes is written to a tamper-proof log, so anyone can later see exactly what was checked and why a decision was made.
+
+It was first built for a **Barclays hackathon**, then refined into a tool that **financial advisors and deal teams** can use day to day: fewer documents to read by hand, nothing approved without a reason, and a full record behind every decision.
+
+**How it works, step by step.** An analyst uploads a term sheet (PDF, DOCX or a scanned image). Validito:
 
 1. **extracts** the clauses: PyMuPDF for the text layer, EasyOCR for scans, a label-driven extractor plus spaCy NER for 26 fields, each value normalised and given a confidence
 2. **validates** them against the market's **rule pack** (ISDA, LMA, LSTA or FX forward, auto-detected), against a linked document (term sheet vs confirmation, original vs amendment), and against an **Isolation Forest** that scores the overall combination of terms
